@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Dashboard Analista Financeiro Especialista
-Visualiza análises, recomendações e contexto macroeconômico
+Dashboard Analista Financeiro Especialista com Scores
+Visualiza análises, recomendações, scores e contexto macroeconômico
 """
 
 import streamlit as st
@@ -9,14 +9,13 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import tempfile
-import json
 from pathlib import Path
 from datetime import datetime
 
 from tools.parser_b3 import ler_extrato_b3
 from tools.macro_data import macro
 from tools.asset_research import analisar_ativo
-from tools.interpretador import Interpretador
+from tools.scorer import calcular_score_por_classe
 
 
 # Config página
@@ -28,41 +27,11 @@ st.set_page_config(
 )
 
 st.title("📊 Analista Financeiro Especialista")
-st.markdown("Análise acionável de carteira com recomendações por ativo")
-
-# CSS customizado
-st.markdown("""
-<style>
-    .recomendacao-aumente {
-        background-color: #d4edda;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 4px solid #28a745;
-    }
-    .recomendacao-mantenha {
-        background-color: #fff3cd;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 4px solid #ffc107;
-    }
-    .recomendacao-reduza {
-        background-color: #f8d7da;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 4px solid #dc3545;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.markdown("Análise acionável com scores de qualidade dos ativos")
 
 
 def processar_carteira(arquivo):
-    """Processa extrato e gera análise completa"""
+    """Processa extrato e gera análise completa com scores"""
     with tempfile.TemporaryDirectory() as tmpdir:
         temp_path = Path(tmpdir) / arquivo.name
         with open(temp_path, "wb") as f:
@@ -90,12 +59,30 @@ def processar_carteira(arquivo):
 
                 try:
                     resultado = analisar_ativo(ticker, classe)
-                    analises[classe].append(resultado)
+
+                    # Calcular score
+                    score_info = calcular_score_por_classe(
+                        classe,
+                        ticker,
+                        resultado.get("dados", {}) if resultado else {},
+                        macro_dados,
+                        ativo.get("valor_total", 0)
+                    )
+
+                    analises[classe].append({
+                        "ticker": ticker,
+                        "classe": classe,
+                        "dados_yf": resultado.get("dados") if resultado else {},
+                        "score": score_info,
+                        "valor": ativo.get("valor_total", 0)
+                    })
                 except Exception as e:
                     analises[classe].append({
                         "ticker": ticker,
                         "classe": classe,
-                        "erro": str(e)
+                        "erro": str(e),
+                        "score": {"score": "N/A", "categoria": "Erro"},
+                        "valor": ativo.get("valor_total", 0)
                     })
 
                 progress_bar.progress(contador / total_ativos)
@@ -108,219 +95,169 @@ def exibir_contexto_macro(macro_dados):
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric(
-            "Selic",
-            f"{macro_dados.get('selic', 0):.2f}%",
-            "a.a."
-        )
-
+        st.metric("Selic", f"{macro_dados.get('selic', 0):.2f}%", "a.a.")
     with col2:
-        st.metric(
-            "IPCA 12m",
-            f"{macro_dados.get('ipca_12m', 0):.2f}%",
-            "a.a."
-        )
-
+        st.metric("IPCA 12m", f"{macro_dados.get('ipca_12m', 0):.2f}%", "a.a.")
     with col3:
-        st.metric(
-            "CDI",
-            f"{macro_dados.get('cdi', 0):.2f}%",
-            "a.a."
-        )
-
+        st.metric("CDI", f"{macro_dados.get('cdi', 0):.2f}%", "a.a.")
     with col4:
         taxa_real = macro_dados.get('selic', 0) - macro_dados.get('ipca_12m', 0)
-        st.metric(
-            "Taxa Real",
-            f"{taxa_real:.2f}%",
-            "Selic - IPCA"
-        )
+        st.metric("Taxa Real", f"{taxa_real:.2f}%", "Selic - IPCA")
 
 
-def exibir_recomendacoes(analises, carteira):
-    """Exibe recomendações por classe"""
+def exibir_scores_cards(analises):
+    """Exibe cards com scores dos ativos"""
+    st.subheader("🎯 Scores de Qualidade dos Ativos")
 
-    # Extrair recomendações
-    recomendacoes = {
-        "AUMENTE": [],
-        "MANTENHA": [],
-        "REDUZA": [],
-        "VENDA": [],
-        "N/A": []
-    }
-
+    # Coletar todos os ativos com scores
+    ativos_com_score = []
     for classe, ativos_lista in analises.items():
         for ativo in ativos_lista:
-            ticker = ativo.get("ticker", "N/A")
-            dados_yf = ativo.get("dados", {})
+            score = ativo.get("score", {}).get("score", "N/A")
+            if isinstance(score, (int, float)):
+                ativos_com_score.append({
+                    "ticker": ativo["ticker"],
+                    "classe": classe,
+                    "score": score,
+                    "categoria": ativo.get("score", {}).get("categoria", "N/A"),
+                    "valor": ativo.get("valor", 0)
+                })
 
-            # Obter recomendação
-            if "erro" in ativo:
-                rec = "N/A"
-                analise = ativo.get("erro", "Sem dados")
-            else:
-                rec = ativo.get("interpretacao") or "N/A"
-                analise = dados_yf.get("dividend_yield_12m") or dados_yf.get("dividend_yield") or "N/A"
+    if not ativos_com_score:
+        st.warning("Nenhum score disponível")
+        return
 
-            # Por enquanto, usar lógica simplificada (real vem do interpretador)
-            if classe == "FII":
-                dy = dados_yf.get("dividend_yield_12m", 0)
-                if dy and dy > 12:
-                    rec = "AUMENTE"
-                elif dy and dy > 8:
-                    rec = "MANTENHA"
-                else:
-                    rec = "REDUZA"
-            elif classe == "ACAO_BR":
-                p_l = dados_yf.get("p_l")
-                if p_l and p_l < 10:
-                    rec = "AUMENTE"
-                elif p_l and p_l < 15:
-                    rec = "MANTENHA"
-                else:
-                    rec = "REDUZA"
-            else:
-                rec = "MANTENHA"
+    # Ordenar por score decrescente
+    ativos_com_score.sort(key=lambda x: x["score"] if isinstance(x["score"], (int, float)) else 0, reverse=True)
 
-            recomendacoes[rec].append({
-                "ticker": ticker,
-                "classe": classe,
-                "dados": dados_yf
-            })
+    # Exibir em colunas
+    cols = st.columns(5)
+    for idx, ativo in enumerate(ativos_com_score[:20]):  # Top 20
+        col = cols[idx % 5]
 
-    # Exibir por recomendação
-    col1, col2, col3, col4 = st.columns(4)
+        score = ativo["score"]
+        categoria = ativo["categoria"]
 
+        # Cor por categoria
+        cor_bg = {
+            "Excelente": "🟢",
+            "Muito Atrativo": "🟢",
+            "Bom": "🟡",
+            "Atrativo": "🟡",
+            "Neutro": "⚪",
+            "Fraco": "🔴",
+            "Pouco Atrativo": "🔴",
+            "Crítico": "🔴"
+        }.get(categoria, "⚪")
+
+        with col:
+            st.metric(
+                f"{cor_bg} {ativo['ticker']}",
+                f"{score:.1f}" if isinstance(score, (int, float)) else "N/A",
+                categoria,
+                label_visibility="visible"
+            )
+
+
+def exibir_ranking_scores(analises):
+    """Exibe ranking de ativos por score"""
+    st.subheader("📊 Ranking de Ativos por Score")
+
+    # Coletar dados
+    ranking_data = []
+    for classe, ativos_lista in analises.items():
+        for ativo in ativos_lista:
+            score = ativo.get("score", {}).get("score", "N/A")
+            if isinstance(score, (int, float)):
+                ranking_data.append({
+                    "Ticker": ativo["ticker"],
+                    "Classe": classe,
+                    "Score": score,
+                    "Categoria": ativo.get("score", {}).get("categoria", "N/A"),
+                    "Valor (R$)": f"{ativo.get('valor', 0):,.2f}" if ativo.get('valor') else "N/D"
+                })
+
+    if ranking_data:
+        df_ranking = pd.DataFrame(ranking_data).sort_values("Score", ascending=False)
+        st.dataframe(df_ranking, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum dado disponível")
+
+
+def exibir_filtro_scores(analises):
+    """Exibe tabela com filtro por faixa de score"""
+    st.subheader("🔍 Filtro por Faixa de Score")
+
+    # Selector de faixa
+    col1, col2 = st.columns(2)
     with col1:
-        st.metric(
-            "🟢 AUMENTE",
-            len(recomendacoes["AUMENTE"]),
-            "ativos"
-        )
-
+        score_min = st.slider("Score mínimo", 0, 10, 5)
     with col2:
-        st.metric(
-            "🟡 MANTENHA",
-            len(recomendacoes["MANTENHA"]),
-            "ativos"
-        )
+        score_max = st.slider("Score máximo", 0, 10, 10)
 
-    with col3:
-        st.metric(
-            "🔴 REDUZA",
-            len(recomendacoes["REDUZA"]),
-            "ativos"
-        )
+    # Coletar dados filtrados
+    ativos_filtrados = []
+    for classe, ativos_lista in analises.items():
+        for ativo in ativos_lista:
+            score = ativo.get("score", {}).get("score", "N/A")
+            if isinstance(score, (int, float)) and score_min <= score <= score_max:
+                ativos_filtrados.append({
+                    "Ticker": ativo["ticker"],
+                    "Classe": classe,
+                    "Score": f"{score:.1f}",
+                    "Categoria": ativo.get("score", {}).get("categoria", "N/A"),
+                    "DY": f"{(ativo.get('dados_yf', {}).get('dividend_yield', 0) * 100):.2f}%" if ativo.get('dados_yf', {}).get('dividend_yield') else "N/A",
+                    "P/L": f"{ativo.get('dados_yf', {}).get('p_l', 'N/A'):.1f}" if ativo.get('dados_yf', {}).get('p_l') else "N/A"
+                })
 
-    with col4:
-        st.metric(
-            "⛔ VENDA",
-            len(recomendacoes["VENDA"]),
-            "ativos"
-        )
-
-    # Tabela de recomendações
-    st.subheader("📋 Recomendações Detalhadas")
-
-    for rec_tipo in ["AUMENTE", "MANTENHA", "REDUZA", "VENDA"]:
-        ativos = recomendacoes[rec_tipo]
-        if ativos:
-            with st.expander(f"{rec_tipo} ({len(ativos)} ativo(s))"):
-                df_data = []
-                for ativo in ativos:
-                    df_data.append({
-                        "Ticker": ativo["ticker"],
-                        "Classe": ativo["classe"],
-                        "P/L": f"{ativo['dados'].get('p_l', 'N/A')}",
-                        "DY": f"{(ativo['dados'].get('dividend_yield', 0) * 100):.2f}%" if ativo['dados'].get('dividend_yield') else "N/A",
-                        "Cotação": f"R$ {ativo['dados'].get('cotacao_atual', 'N/A')}"
-                    })
-
-                df = pd.DataFrame(df_data)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+    if ativos_filtrados:
+        df_filtrado = pd.DataFrame(ativos_filtrados)
+        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+        st.caption(f"Total: {len(ativos_filtrados)} ativo(s)")
+    else:
+        st.warning("Nenhum ativo nessa faixa de score")
 
 
-def exibir_graficos(analises, carteira):
-    """Exibe gráficos de composição e recomendações"""
+def exibir_graficos_scores(analises):
+    """Exibe gráficos de distribuição de scores"""
+    st.subheader("📈 Distribuição de Scores")
+
+    # Coletar scores
+    scores = []
+    categorias = []
+    for classe, ativos_lista in analises.items():
+        for ativo in ativos_lista:
+            score = ativo.get("score", {}).get("score", "N/A")
+            if isinstance(score, (int, float)):
+                scores.append(score)
+                categorias.append(ativo.get("score", {}).get("categoria", "N/A"))
+
+    if not scores:
+        st.warning("Nenhum score disponível para gráfico")
+        return
 
     col1, col2 = st.columns(2)
 
-    # Gráfico de composição por classe
+    # Histograma de scores
     with col1:
-        classes_count = {k: len(v) for k, v in carteira.items()}
-        fig_pie = px.pie(
-            values=list(classes_count.values()),
-            names=list(classes_count.keys()),
-            title="Composição por Classe de Ativo",
-            hole=0.3
+        fig_hist = px.histogram(
+            x=scores,
+            nbins=10,
+            title="Distribuição de Scores",
+            labels={"x": "Score", "count": "Quantidade"},
+            color_discrete_sequence=["#1f77b4"]
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_hist, use_container_width=True)
 
-    # Gráfico de recomendações
+    # Gráfico de categorias
     with col2:
-        recomendacoes_count = {"AUMENTE": 0, "MANTENHA": 0, "REDUZA": 0, "VENDA": 0}
-
-        for classe, ativos_lista in analises.items():
-            for ativo in ativos_lista:
-                if classe == "FII":
-                    dy = ativo.get("dados", {}).get("dividend_yield_12m", 0)
-                    if dy and dy > 12:
-                        recomendacoes_count["AUMENTE"] += 1
-                    elif dy and dy > 8:
-                        recomendacoes_count["MANTENHA"] += 1
-                    else:
-                        recomendacoes_count["REDUZA"] += 1
-                else:
-                    recomendacoes_count["MANTENHA"] += 1
-
-        fig_rec = px.bar(
-            x=list(recomendacoes_count.keys()),
-            y=list(recomendacoes_count.values()),
-            title="Distribuição de Recomendações",
-            labels={"x": "Recomendação", "y": "Quantidade"},
-            color=list(recomendacoes_count.keys()),
-            color_discrete_map={
-                "AUMENTE": "#28a745",
-                "MANTENHA": "#ffc107",
-                "REDUZA": "#dc3545",
-                "VENDA": "#6c757d"
-            }
+        categoria_count = pd.Series(categorias).value_counts()
+        fig_cat = px.pie(
+            values=categoria_count.values,
+            names=categoria_count.index,
+            title="Distribuição por Categoria"
         )
-        st.plotly_chart(fig_rec, use_container_width=True)
-
-
-def exibir_tabela_completa(carteira, analises):
-    """Exibe tabela completa com todos os ativos"""
-    st.subheader("📊 Análise Completa da Carteira")
-
-    tabela_data = []
-    for classe, ativos in carteira.items():
-        for ativo in ativos:
-            ticker = ativo["ticker"]
-            valor = ativo.get("valor_total", 0)
-
-            # Encontrar dados de análise
-            analise_ativo = None
-            if classe in analises:
-                for a in analises[classe]:
-                    if a.get("ticker") == ticker:
-                        analise_ativo = a
-                        break
-
-            dados_yf = analise_ativo.get("dados", {}) if analise_ativo else {}
-
-            tabela_data.append({
-                "Ticker": ticker,
-                "Classe": classe,
-                "Valor (R$)": f"{valor:,.2f}" if valor else "N/D",
-                "Cotação": f"R$ {dados_yf.get('cotacao_atual', 'N/A')}",
-                "P/L": f"{dados_yf.get('p_l', 'N/A'):.2f}" if dados_yf.get('p_l') else "N/A",
-                "P/VP": f"{dados_yf.get('p_vp', 'N/A'):.2f}" if dados_yf.get('p_vp') else "N/A",
-                "DY": f"{(dados_yf.get('dividend_yield', 0) * 100):.2f}%" if dados_yf.get('dividend_yield') else f"{dados_yf.get('dividend_yield_12m', 0):.2f}%" if dados_yf.get('dividend_yield_12m') else "N/A"
-            })
-
-    df_tabela = pd.DataFrame(tabela_data)
-    st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+        st.plotly_chart(fig_cat, use_container_width=True)
 
 
 def main():
@@ -329,8 +266,7 @@ def main():
         st.markdown("### 📁 Upload")
         arquivo = st.file_uploader(
             "Selecione seu extrato B3 (Excel)",
-            type=["xlsx", "xls"],
-            help="Arquivo com múltiplas abas (Ações, FII, ETF, Renda Fixa, Tesouro)"
+            type=["xlsx", "xls"]
         )
 
     if arquivo:
@@ -338,8 +274,8 @@ def main():
         carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
-        tab1, tab2, tab3, tab4 = st.tabs(
-            ["📈 Contexto Macro", "🎯 Recomendações", "📊 Gráficos", "📋 Tabela"]
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos"]
         )
 
         with tab1:
@@ -349,62 +285,65 @@ def main():
             st.divider()
             st.markdown("""
             **Interpretação:**
-            - **Selic elevada** → Pressiona fundos imobiliários e ações
-            - **Taxa Real** (Selic - IPCA) → Retorno real esperado de ativos
+            - **Selic elevada** → Pressiona FIIs e ações, favorece renda fixa
+            - **Taxa Real** (Selic - IPCA) → Retorno real de ativos
             - **CDI** → Benchmark para renda fixa privada
             """)
 
         with tab2:
-            st.subheader("🎯 Recomendações por Ativo")
-            exibir_recomendacoes(analises, carteira)
+            exibir_scores_cards(analises)
 
         with tab3:
-            st.subheader("📊 Visualização da Carteira")
-            exibir_graficos(analises, carteira)
+            exibir_ranking_scores(analises)
 
         with tab4:
-            exibir_tabela_completa(carteira, analises)
+            exibir_filtro_scores(analises)
+
+        with tab5:
+            exibir_graficos_scores(analises)
 
         # Rodapé
         st.divider()
-        st.caption(f"Análise gerada em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')} | "
-                   f"Dados em tempo real via yfinance e BCB Open Data")
+        st.caption(
+            f"Análise gerada em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')} | "
+            f"Scores 0-10 por qualidade do ativo"
+        )
 
     else:
-        st.info(
-            "👈 Faça upload do seu extrato B3 na barra lateral para gerar análise!"
-        )
+        st.info("👈 Faça upload do seu extrato B3 para começar!")
 
         st.markdown("""
         ---
         ### 🚀 Como usar:
 
-        1. **Exporte seu extrato da B3** em Excel (com abas: Ações, FII, ETF, etc.)
-        2. **Faça upload** usando o botão na barra lateral
-        3. **Aguarde a análise** (alguns segundos)
-        4. **Visualize as recomendações**:
-           - 🟢 **AUMENTE** — oportunidades de compra
-           - 🟡 **MANTENHA** — posições bem posicionadas
-           - 🔴 **REDUZA** — revisão recomendada
+        1. **Exporte seu extrato da B3** em Excel
+        2. **Faça upload** na barra lateral
+        3. **Veja os scores** de cada ativo (0-10)
 
         ---
 
         ### 📊 Abas disponíveis:
 
-        - **Contexto Macro** — Selic, IPCA, CDI atual e interpretação
-        - **Recomendações** — Análise detalhada por ativo
-        - **Gráficos** — Composição da carteira e distribuição de recomendações
-        - **Tabela** — Todos os ativos com métricas completas
+        - **Macro** — Selic, IPCA, CDI, taxa real
+        - **Scores** — Cards visuais de cada ativo
+        - **Ranking** — Ativos ordenados por score
+        - **Filtros** — Filtrar por faixa de score
+        - **Gráficos** — Distribuição de scores
 
         ---
 
-        ### 🤖 Analista Especialista:
+        ### 🎯 Sistema de Scores:
 
-        O sistema analisa cada ativo considerando:
-        - **FIIs**: dividend yield vs Selic, P/VP, sensibilidade a juros
-        - **Ações**: valuation (P/L, P/VP), setor específico, ciclo econômico
-        - **Tesouro**: taxa real vs objetivo, duration
-        - **CDB**: spread sobre CDI
+        **0-3:** Crítico/Pouco Atrativo 🔴
+        **4-5:** Fraco/Neutro ⚪
+        **6-7:** Bom/Atrativo 🟡
+        **8-10:** Excelente/Muito Atrativo 🟢
+
+        Scores consideram:
+        - **Ações:** Valuation (P/L, P/VP), DY, Beta
+        - **FIIs:** DY vs Selic, liquidez
+        - **Renda Fixa:** Taxa vs CDI, spread
+        - **Tesouro:** Taxa real, proteção
         """)
 
 
