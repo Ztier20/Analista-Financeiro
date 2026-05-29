@@ -1,0 +1,14 @@
+# Parser de extratos da B3
+pandas>=2.0.0
+openpyxl>=3.0.0
+
+# Pesquisa e análise de ativos
+yfinance>=0.2.28
+requests>=2.31.0
+
+# Ferramentas gerais
+python-dotenv>=1.0.0
+
+# Testes
+pytest>=7.0.0
+pytest-cov>=4.0.0
