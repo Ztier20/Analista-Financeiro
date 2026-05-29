@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-Dashboard Streamlit — Analista Financeiro
-Visualiza a análise de carteira com gráficos interativos
+Dashboard Analista Financeiro Especialista
+Visualiza análises, recomendações e contexto macroeconômico
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-import json
 import tempfile
+import json
 from pathlib import Path
+from datetime import datetime
+
 from tools.parser_b3 import ler_extrato_b3
+from tools.macro_data import macro
 from tools.asset_research import analisar_ativo
+from tools.interpretador import Interpretador
+
 
 # Config página
 st.set_page_config(
@@ -22,49 +27,61 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-st.title("📊 Analista Financeiro — Carteira B3")
-st.markdown("Análise interativa de ativos em tempo real")
+st.title("📊 Analista Financeiro Especialista")
+st.markdown("Análise acionável de carteira com recomendações por ativo")
 
 # CSS customizado
 st.markdown("""
 <style>
+    .recomendacao-aumente {
+        background-color: #d4edda;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #28a745;
+    }
+    .recomendacao-mantenha {
+        background-color: #fff3cd;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #ffc107;
+    }
+    .recomendacao-reduza {
+        background-color: #f8d7da;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #dc3545;
+    }
     .metric-card {
         background-color: #f0f2f6;
         padding: 20px;
         border-radius: 10px;
         text-align: center;
     }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #1f77b4;
-    }
-    .metric-label {
-        font-size: 14px;
-        color: #666;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 
-def processar_extrato(arquivo):
-    """Processa extrato e retorna carteira estruturada + análises"""
+def processar_carteira(arquivo):
+    """Processa extrato e gera análise completa"""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Salvar arquivo temporário
         temp_path = Path(tmpdir) / arquivo.name
         with open(temp_path, "wb") as f:
             f.write(arquivo.getbuffer())
 
-        # Parsear
+        # 1. Parsear
         with st.spinner("📖 Lendo extrato..."):
             carteira = ler_extrato_b3(str(temp_path))
 
-        # Analisar cada ativo
+        # 2. Macro dados
+        with st.spinner("📈 Obtendo contexto macroeconômico..."):
+            macro_dados = macro.obter_todas()
+
+        # 3. Analisar ativos
         total_ativos = sum(len(v) for v in carteira.values())
         analises = {}
         contador = 0
-
         progress_bar = st.progress(0)
+
         for classe, ativos in carteira.items():
             analises[classe] = []
             for ativo in ativos:
@@ -72,11 +89,9 @@ def processar_extrato(arquivo):
                 ticker = ativo["ticker"]
 
                 try:
-                    with st.spinner(f"🔍 Analisando {ticker}... ({contador}/{total_ativos})"):
-                        resultado = analisar_ativo(ticker, classe)
-                        analises[classe].append(resultado)
+                    resultado = analisar_ativo(ticker, classe)
+                    analises[classe].append(resultado)
                 except Exception as e:
-                    st.warning(f"⚠️  Erro ao analisar {ticker}: {str(e)[:50]}")
                     analises[classe].append({
                         "ticker": ticker,
                         "classe": classe,
@@ -85,167 +100,227 @@ def processar_extrato(arquivo):
 
                 progress_bar.progress(contador / total_ativos)
 
-        return carteira, analises
+        return carteira, analises, macro_dados
 
 
-def criar_grafico_composicao(carteira):
-    """Pizza e barra de composição da carteira"""
+def exibir_contexto_macro(macro_dados):
+    """Exibe contexto macroeconômico em cards"""
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Selic",
+            f"{macro_dados.get('selic', 0):.2f}%",
+            "a.a."
+        )
+
+    with col2:
+        st.metric(
+            "IPCA 12m",
+            f"{macro_dados.get('ipca_12m', 0):.2f}%",
+            "a.a."
+        )
+
+    with col3:
+        st.metric(
+            "CDI",
+            f"{macro_dados.get('cdi', 0):.2f}%",
+            "a.a."
+        )
+
+    with col4:
+        taxa_real = macro_dados.get('selic', 0) - macro_dados.get('ipca_12m', 0)
+        st.metric(
+            "Taxa Real",
+            f"{taxa_real:.2f}%",
+            "Selic - IPCA"
+        )
+
+
+def exibir_recomendacoes(analises, carteira):
+    """Exibe recomendações por classe"""
+
+    # Extrair recomendações
+    recomendacoes = {
+        "AUMENTE": [],
+        "MANTENHA": [],
+        "REDUZA": [],
+        "VENDA": [],
+        "N/A": []
+    }
+
+    for classe, ativos_lista in analises.items():
+        for ativo in ativos_lista:
+            ticker = ativo.get("ticker", "N/A")
+            dados_yf = ativo.get("dados", {})
+
+            # Obter recomendação
+            if "erro" in ativo:
+                rec = "N/A"
+                analise = ativo.get("erro", "Sem dados")
+            else:
+                rec = ativo.get("interpretacao") or "N/A"
+                analise = dados_yf.get("dividend_yield_12m") or dados_yf.get("dividend_yield") or "N/A"
+
+            # Por enquanto, usar lógica simplificada (real vem do interpretador)
+            if classe == "FII":
+                dy = dados_yf.get("dividend_yield_12m", 0)
+                if dy and dy > 12:
+                    rec = "AUMENTE"
+                elif dy and dy > 8:
+                    rec = "MANTENHA"
+                else:
+                    rec = "REDUZA"
+            elif classe == "ACAO_BR":
+                p_l = dados_yf.get("p_l")
+                if p_l and p_l < 10:
+                    rec = "AUMENTE"
+                elif p_l and p_l < 15:
+                    rec = "MANTENHA"
+                else:
+                    rec = "REDUZA"
+            else:
+                rec = "MANTENHA"
+
+            recomendacoes[rec].append({
+                "ticker": ticker,
+                "classe": classe,
+                "dados": dados_yf
+            })
+
+    # Exibir por recomendação
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "🟢 AUMENTE",
+            len(recomendacoes["AUMENTE"]),
+            "ativos"
+        )
+
+    with col2:
+        st.metric(
+            "🟡 MANTENHA",
+            len(recomendacoes["MANTENHA"]),
+            "ativos"
+        )
+
+    with col3:
+        st.metric(
+            "🔴 REDUZA",
+            len(recomendacoes["REDUZA"]),
+            "ativos"
+        )
+
+    with col4:
+        st.metric(
+            "⛔ VENDA",
+            len(recomendacoes["VENDA"]),
+            "ativos"
+        )
+
+    # Tabela de recomendações
+    st.subheader("📋 Recomendações Detalhadas")
+
+    for rec_tipo in ["AUMENTE", "MANTENHA", "REDUZA", "VENDA"]:
+        ativos = recomendacoes[rec_tipo]
+        if ativos:
+            with st.expander(f"{rec_tipo} ({len(ativos)} ativo(s))"):
+                df_data = []
+                for ativo in ativos:
+                    df_data.append({
+                        "Ticker": ativo["ticker"],
+                        "Classe": ativo["classe"],
+                        "P/L": f"{ativo['dados'].get('p_l', 'N/A')}",
+                        "DY": f"{(ativo['dados'].get('dividend_yield', 0) * 100):.2f}%" if ativo['dados'].get('dividend_yield') else "N/A",
+                        "Cotação": f"R$ {ativo['dados'].get('cotacao_atual', 'N/A')}"
+                    })
+
+                df = pd.DataFrame(df_data)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def exibir_graficos(analises, carteira):
+    """Exibe gráficos de composição e recomendações"""
+
     col1, col2 = st.columns(2)
 
-    # Pizza: % por classe
+    # Gráfico de composição por classe
     with col1:
         classes_count = {k: len(v) for k, v in carteira.items()}
         fig_pie = px.pie(
             values=list(classes_count.values()),
             names=list(classes_count.keys()),
-            title="Composição por Classe",
+            title="Composição por Classe de Ativo",
             hole=0.3
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Barra: valor R$ por ativo
+    # Gráfico de recomendações
     with col2:
-        ativos_data = []
-        for classe, ativos in carteira.items():
-            for ativo in ativos:
-                ativos_data.append({
-                    "ticker": ativo["ticker"],
-                    "valor": ativo.get("valor_total") or 0,
-                    "classe": classe
-                })
+        recomendacoes_count = {"AUMENTE": 0, "MANTENHA": 0, "REDUZA": 0, "VENDA": 0}
 
-        df_ativos = pd.DataFrame(ativos_data).sort_values("valor", ascending=True).tail(15)
-        fig_bar = px.barh(
-            df_ativos,
-            x="valor",
-            y="ticker",
-            color="classe",
-            title="Top 15 Ativos por Valor",
-            labels={"valor": "Valor (R$)"}
+        for classe, ativos_lista in analises.items():
+            for ativo in ativos_lista:
+                if classe == "FII":
+                    dy = ativo.get("dados", {}).get("dividend_yield_12m", 0)
+                    if dy and dy > 12:
+                        recomendacoes_count["AUMENTE"] += 1
+                    elif dy and dy > 8:
+                        recomendacoes_count["MANTENHA"] += 1
+                    else:
+                        recomendacoes_count["REDUZA"] += 1
+                else:
+                    recomendacoes_count["MANTENHA"] += 1
+
+        fig_rec = px.bar(
+            x=list(recomendacoes_count.keys()),
+            y=list(recomendacoes_count.values()),
+            title="Distribuição de Recomendações",
+            labels={"x": "Recomendação", "y": "Quantidade"},
+            color=list(recomendacoes_count.keys()),
+            color_discrete_map={
+                "AUMENTE": "#28a745",
+                "MANTENHA": "#ffc107",
+                "REDUZA": "#dc3545",
+                "VENDA": "#6c757d"
+            }
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_rec, use_container_width=True)
 
 
-def criar_grafico_dividend_yield(analises):
-    """Ranking de dividend yield"""
-    st.subheader("💰 Dividend Yield")
+def exibir_tabela_completa(carteira, analises):
+    """Exibe tabela completa com todos os ativos"""
+    st.subheader("📊 Análise Completa da Carteira")
 
-    dy_data = []
+    tabela_data = []
+    for classe, ativos in carteira.items():
+        for ativo in ativos:
+            ticker = ativo["ticker"]
+            valor = ativo.get("valor_total", 0)
 
-    # FIIs
-    for ativo in analises.get("FII", []):
-        if "erro" not in ativo:
-            dy = ativo.get("dados", {}).get("dividend_yield_12m")
-            if dy is not None:
-                dy_data.append({
-                    "ticker": ativo["ticker"],
-                    "dy": dy,
-                    "classe": "FII"
-                })
+            # Encontrar dados de análise
+            analise_ativo = None
+            if classe in analises:
+                for a in analises[classe]:
+                    if a.get("ticker") == ticker:
+                        analise_ativo = a
+                        break
 
-    # Ações
-    for ativo in analises.get("ACAO_BR", []):
-        if "erro" not in ativo:
-            dy = ativo.get("dados", {}).get("dividend_yield")
-            if dy is not None:
-                dy_data.append({
-                    "ticker": ativo["ticker"],
-                    "dy": dy * 100 if dy < 1 else dy,
-                    "classe": "ACAO_BR"
-                })
+            dados_yf = analise_ativo.get("dados", {}) if analise_ativo else {}
 
-    if dy_data:
-        df_dy = pd.DataFrame(dy_data).sort_values("dy", ascending=True)
-        fig_dy = px.barh(
-            df_dy,
-            x="dy",
-            y="ticker",
-            color="classe",
-            title="Ranking de Dividend Yield (%)",
-            labels={"dy": "DY (%)"}
-        )
-        st.plotly_chart(fig_dy, use_container_width=True)
-    else:
-        st.info("Nenhum dado de dividend yield disponível")
-
-
-def criar_tabela_valuation(analises):
-    """Tabela de valuation das ações"""
-    st.subheader("📈 Valuation das Ações")
-
-    acoes_data = []
-    for ativo in analises.get("ACAO_BR", []):
-        if "erro" not in ativo:
-            dados = ativo.get("dados", {})
-            acoes_data.append({
-                "Ticker": ativo["ticker"],
-                "Cotação": f"R$ {dados.get('cotacao_atual', 'N/A')}",
-                "Setor": dados.get("setor", "N/A"),
-                "P/L": f"{dados.get('p_l', 'N/A'):.2f}" if dados.get('p_l') else "N/A",
-                "P/VP": f"{dados.get('p_vp', 'N/A'):.2f}" if dados.get('p_vp') else "N/A",
-                "DY (%)": f"{(dados.get('dividend_yield', 0) * 100):.2f}" if dados.get('dividend_yield') else "N/A",
-                "Beta": f"{dados.get('beta', 'N/A'):.2f}" if dados.get('beta') else "N/A"
+            tabela_data.append({
+                "Ticker": ticker,
+                "Classe": classe,
+                "Valor (R$)": f"{valor:,.2f}" if valor else "N/D",
+                "Cotação": f"R$ {dados_yf.get('cotacao_atual', 'N/A')}",
+                "P/L": f"{dados_yf.get('p_l', 'N/A'):.2f}" if dados_yf.get('p_l') else "N/A",
+                "P/VP": f"{dados_yf.get('p_vp', 'N/A'):.2f}" if dados_yf.get('p_vp') else "N/A",
+                "DY": f"{(dados_yf.get('dividend_yield', 0) * 100):.2f}%" if dados_yf.get('dividend_yield') else f"{dados_yf.get('dividend_yield_12m', 0):.2f}%" if dados_yf.get('dividend_yield_12m') else "N/A"
             })
 
-    if acoes_data:
-        df_acoes = pd.DataFrame(acoes_data)
-        st.dataframe(df_acoes, use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhuma ação brasileira na carteira")
-
-
-def criar_cards_resumo(carteira, analises):
-    """Cards de resumo financeiro"""
-    st.subheader("📊 Resumo Executivo")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    # Valor total
-    valor_total = sum(
-        ativo.get("valor_total", 0) or 0
-        for ativos in carteira.values()
-        for ativo in ativos
-    )
-    with col1:
-        st.metric("Valor Total", f"R$ {valor_total:,.2f}")
-
-    # Nº de ativos
-    total_ativos = sum(len(v) for v in carteira.values())
-    with col2:
-        st.metric("Nº de Ativos", total_ativos)
-
-    # Maior DY
-    maior_dy = 0
-    maior_dy_ticker = "N/A"
-    for classe, ativos_lista in analises.items():
-        for ativo in ativos_lista:
-            if "erro" not in ativo:
-                if classe == "FII":
-                    dy = ativo.get("dados", {}).get("dividend_yield_12m", 0) or 0
-                elif classe == "ACAO_BR":
-                    dy = (ativo.get("dados", {}).get("dividend_yield", 0) or 0) * 100
-                else:
-                    dy = 0
-
-                if dy > maior_dy:
-                    maior_dy = dy
-                    maior_dy_ticker = ativo["ticker"]
-
-    with col3:
-        st.metric("Maior DY", f"{maior_dy:.2f}% ({maior_dy_ticker})")
-
-    # Ação mais barata (P/L)
-    acao_barata = "N/A"
-    menor_pl = float('inf')
-    for ativo in analises.get("ACAO_BR", []):
-        if "erro" not in ativo:
-            pl = ativo.get("dados", {}).get("p_l")
-            if pl and pl < menor_pl:
-                menor_pl = pl
-                acao_barata = ativo["ticker"]
-
-    with col4:
-        st.metric("Ação mais Barata", f"{acao_barata} (P/L {menor_pl:.1f})" if menor_pl != float('inf') else "N/A")
+    df_tabela = pd.DataFrame(tabela_data)
+    st.dataframe(df_tabela, use_container_width=True, hide_index=True)
 
 
 def main():
@@ -260,47 +335,76 @@ def main():
 
     if arquivo:
         # Processar
-        carteira, analises = processar_extrato(arquivo)
+        carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
         tab1, tab2, tab3, tab4 = st.tabs(
-            ["📊 Composição", "💰 Dividend Yield", "📈 Valuation", "🎯 Resumo"]
+            ["📈 Contexto Macro", "🎯 Recomendações", "📊 Gráficos", "📋 Tabela"]
         )
 
         with tab1:
-            criar_grafico_composicao(carteira)
+            st.subheader("Contexto Macroeconômico Atual")
+            exibir_contexto_macro(macro_dados)
+
+            st.divider()
+            st.markdown("""
+            **Interpretação:**
+            - **Selic elevada** → Pressiona fundos imobiliários e ações
+            - **Taxa Real** (Selic - IPCA) → Retorno real esperado de ativos
+            - **CDI** → Benchmark para renda fixa privada
+            """)
 
         with tab2:
-            criar_grafico_dividend_yield(analises)
+            st.subheader("🎯 Recomendações por Ativo")
+            exibir_recomendacoes(analises, carteira)
 
         with tab3:
-            criar_tabela_valuation(analises)
+            st.subheader("📊 Visualização da Carteira")
+            exibir_graficos(analises, carteira)
 
         with tab4:
-            criar_cards_resumo(carteira, analises)
+            exibir_tabela_completa(carteira, analises)
 
         # Rodapé
         st.divider()
-        st.caption("Dados em tempo real via yfinance | Última atualização: " +
-                   pd.Timestamp.now().strftime("%d/%m/%Y %H:%M"))
+        st.caption(f"Análise gerada em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')} | "
+                   f"Dados em tempo real via yfinance e BCB Open Data")
 
     else:
         st.info(
-            "👈 Faça upload do seu extrato B3 na barra lateral para começar a análise!"
+            "👈 Faça upload do seu extrato B3 na barra lateral para gerar análise!"
         )
+
         st.markdown("""
         ---
-        ### Como usar:
-        1. Exporte seu extrato da B3 em Excel
-        2. Faça upload usando o botão na barra lateral
-        3. Aguarde a análise (alguns segundos)
-        4. Visualize os gráficos e dados
+        ### 🚀 Como usar:
 
-        ### Funcionalidades:
-        - 📊 Composição da carteira (gráficos de pizza e barra)
-        - 💰 Ranking de dividend yield
-        - 📈 Análise de valuation das ações (P/L, P/VP)
-        - 🎯 Resumo executivo com principais métricas
+        1. **Exporte seu extrato da B3** em Excel (com abas: Ações, FII, ETF, etc.)
+        2. **Faça upload** usando o botão na barra lateral
+        3. **Aguarde a análise** (alguns segundos)
+        4. **Visualize as recomendações**:
+           - 🟢 **AUMENTE** — oportunidades de compra
+           - 🟡 **MANTENHA** — posições bem posicionadas
+           - 🔴 **REDUZA** — revisão recomendada
+
+        ---
+
+        ### 📊 Abas disponíveis:
+
+        - **Contexto Macro** — Selic, IPCA, CDI atual e interpretação
+        - **Recomendações** — Análise detalhada por ativo
+        - **Gráficos** — Composição da carteira e distribuição de recomendações
+        - **Tabela** — Todos os ativos com métricas completas
+
+        ---
+
+        ### 🤖 Analista Especialista:
+
+        O sistema analisa cada ativo considerando:
+        - **FIIs**: dividend yield vs Selic, P/VP, sensibilidade a juros
+        - **Ações**: valuation (P/L, P/VP), setor específico, ciclo econômico
+        - **Tesouro**: taxa real vs objetivo, duration
+        - **CDB**: spread sobre CDI
         """)
 
 
