@@ -14,6 +14,7 @@ from tools.macro_data import macro
 from tools.asset_research import analisar_ativo
 from tools.brapi_client import brapi
 from tools.interpretador import Interpretador
+from tools.scorer import calcular_score_por_classe
 
 
 def gerar_relatorio(arquivo_extrato: str):
@@ -61,6 +62,15 @@ def gerar_relatorio(arquivo_extrato: str):
                     dados_brapi = brapi.buscar_ativo(ticker)
                 except:
                     dados_brapi = None
+
+                # Calcular score de qualidade
+                score_info = calcular_score_por_classe(
+                    classe,
+                    ticker,
+                    dados_yf.get("dados") if dados_yf else {},
+                    macro_dados,
+                    ativo.get("valor_total", 0)
+                )
 
                 # Gerar interpretação
                 if classe == "FII":
@@ -119,6 +129,7 @@ def gerar_relatorio(arquivo_extrato: str):
                     "classe": classe,
                     "recomendacao": rec,
                     "analise": anl,
+                    "score": score_info,
                     "dados_yf": dados_yf,
                     "dados_brapi": dados_brapi
                 })
@@ -197,6 +208,9 @@ def gerar_markdown(relatorio: list, macro_dados: dict, carteira: dict) -> str:
             ticker = item["ticker"]
             rec = item.get("recomendacao", "N/A")
             anl = item.get("analise", "N/A")
+            score_info = item.get("score", {})
+            score = score_info.get("score", "N/A")
+            categoria = score_info.get("categoria", "N/A")
 
             # Emoji por recomendação
             emoji = {
@@ -207,8 +221,24 @@ def gerar_markdown(relatorio: list, macro_dados: dict, carteira: dict) -> str:
                 "N/A": "❓"
             }.get(rec, "❓")
 
-            md += f"#### {emoji} {ticker}\n\n"
-            md += f"**Recomendação:** `{rec}`\n\n"
+            # Emoji por score
+            if isinstance(score, (int, float)):
+                score_emoji = "⭐" if score >= 8 else "✓" if score >= 6 else "◆" if score >= 4 else "!"
+            else:
+                score_emoji = "?"
+
+            md += f"#### {emoji} {ticker} — {score_emoji} Score: {score}\n\n"
+            md += f"**Categoria:** {categoria} | **Recomendação:** `{rec}`\n\n"
+
+            # Detalhes do score
+            if score_info and "detalhes" not in str(score_info):
+                details = []
+                for k, v in score_info.items():
+                    if k not in ["score", "categoria", "ticker", "classe", "detalhes"]:
+                        details.append(f"- {k}: {v}")
+                if details:
+                    md += "**Detalhes:**\n" + "\n".join(details) + "\n\n"
+
             md += f"{anl}\n\n"
             md += "---\n\n"
 
