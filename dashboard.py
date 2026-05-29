@@ -16,6 +16,7 @@ from tools.parser_b3 import ler_extrato_b3
 from tools.macro_data import macro
 from tools.asset_research import analisar_ativo
 from tools.scorer import calcular_score_por_classe
+from tools.correlacao import calcular_correlacao, interpretar_correlacao
 
 
 # Config página
@@ -86,6 +87,10 @@ def processar_carteira(arquivo):
                     })
 
                 progress_bar.progress(contador / total_ativos)
+
+        # Invalidar cache de correlação para novo upload
+        if "correlacao_resultado" in st.session_state:
+            del st.session_state["correlacao_resultado"]
 
         return carteira, analises, macro_dados
 
@@ -260,6 +265,115 @@ def exibir_graficos_scores(analises):
         st.plotly_chart(fig_cat, use_container_width=True)
 
 
+def exibir_correlacao(carteira):
+    """Exibe análise de correlação e diversificação da carteira"""
+    st.subheader("🔗 Análise de Correlação")
+
+    # Cache para não recalcular ao trocar aba
+    CACHE_KEY = "correlacao_resultado"
+
+    if CACHE_KEY not in st.session_state:
+        with st.spinner("Buscando histórico de preços..."):
+            resultado = calcular_correlacao(carteira)
+            st.session_state[CACHE_KEY] = resultado
+    else:
+        resultado = st.session_state[CACHE_KEY]
+
+    if resultado is None:
+        st.warning(
+            "Não foi possível calcular correlação. "
+            "São necessários pelo menos 2 ativos com histórico de mercado "
+            "(FII, ACAO_BR, BDR ou ETF_BR)."
+        )
+        return
+
+    # Informações sobre análise
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Correlação Média Absoluta", f"{resultado['n_ativos']:.0f}",
+                "ativos com dados")
+    col2.metric("Ativos Analisados", resultado['n_ativos'])
+    col3.metric("Dias de Histórico", resultado['n_dias'])
+
+    # Avisos
+    if resultado['tickers_falha']:
+        st.warning(f"Sem dados históricos: {', '.join(resultado['tickers_falha'][:5])}")
+
+    st.divider()
+
+    # Heatmap de correlação
+    st.subheader("Matriz de Correlação — Retornos Diários")
+
+    fig = px.imshow(
+        resultado["matriz"],
+        text_auto=".2f",
+        color_continuous_scale="RdBu_r",
+        zmin=-1,
+        zmax=1,
+        title="Correlação entre ativos (período: 1 ano)",
+        aspect="auto",
+        labels={"color": "Correlação"}
+    )
+    fig.update_layout(height=600)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    # Interpretação
+    interpretacao = interpretar_correlacao(resultado["matriz"])
+    media_corr = interpretacao.get("media_correlacao_absoluta", 0)
+
+    # Classificação de diversificação
+    if media_corr < 0.3:
+        emoji_div = "✅"
+        status_div = "Bem diversificada"
+    elif media_corr < 0.6:
+        emoji_div = "🟡"
+        status_div = "Diversificação moderada"
+    else:
+        emoji_div = "⚠️"
+        status_div = "Concentrada (correlações altas)"
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("⚠️ Alta Correlação (> 0.85)")
+        pares_alta = interpretacao.get("pares_alta_correlacao", [])
+        if pares_alta:
+            for par in pares_alta[:5]:
+                st.write(f"  • {par['Ativo A']} ↔ {par['Ativo B']}: {par['Correlação']:.3f}")
+        else:
+            st.success("Nenhum par com correlação muito alta")
+
+    with col2:
+        st.subheader("✅ Correlação Negativa (< -0.3)")
+        pares_neg = interpretacao.get("pares_correlacao_negativa", [])
+        if pares_neg:
+            for par in pares_neg[:5]:
+                st.write(f"  • {par['Ativo A']} ↔ {par['Ativo B']}: {par['Correlação']:.3f}")
+        else:
+            st.info("Sem pares com correlação negativa (diversificadores)")
+
+    st.divider()
+
+    # Ranking de pares
+    st.subheader("📋 Ranking de Correlações por Par")
+    n_pares = st.slider("Exibir top N pares", 5, 30, 15)
+
+    df_top = interpretacao.get("top_pares", pd.DataFrame())
+    if not df_top.empty:
+        st.dataframe(df_top.head(n_pares), use_container_width=True, hide_index=True)
+    else:
+        st.warning("Sem dados de pares")
+
+    # Resumo de diversificação
+    st.divider()
+    st.info(
+        f"**{emoji_div} Carteira {status_div}**  \n"
+        f"Correlação média absoluta: {media_corr:.3f}  \n"
+        f"(< 0.3 = bem diversificada | 0.3-0.6 = moderada | > 0.6 = concentrada)"
+    )
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -274,8 +388,8 @@ def main():
         carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(
-            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos"]
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação"]
         )
 
         with tab1:
@@ -301,6 +415,9 @@ def main():
 
         with tab5:
             exibir_graficos_scores(analises)
+
+        with tab6:
+            exibir_correlacao(carteira)
 
         # Rodapé
         st.divider()
