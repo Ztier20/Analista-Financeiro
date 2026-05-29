@@ -33,11 +33,15 @@ class DadosMacro:
             return None
 
     def obter_selic(self) -> float:
-        """Taxa Selic média anual (série 11)"""
+        """Taxa Selic média anual (série 11) - convertida de diária para anual"""
         if "selic" not in self.cache:
             valor = self._buscar_bcb(11)
-            # Fallback: valores realistas se API falhar
-            self.cache["selic"] = valor if valor is not None else 13.75
+            if valor is not None:
+                # Série 11 retorna taxa DIÁRIA, converter para anual (252 dias úteis)
+                self.cache["selic"] = ((1 + valor / 100) ** 252 - 1) * 100
+            else:
+                # Fallback: valores realistas se API falhar
+                self.cache["selic"] = 13.75
         return self.cache["selic"]
 
     def obter_ipca_12m(self) -> float:
@@ -48,9 +52,10 @@ class DadosMacro:
         return self.cache["ipca_12m"]
 
     def obter_cdi(self) -> float:
-        """CDI (série 4391)"""
+        """CDI acumulado anual (série 4189)"""
         if "cdi" not in self.cache:
-            valor = self._buscar_bcb(4391)
+            valor = self._buscar_bcb(4189)
+            # Série 4189 já retorna taxa anual acumulada
             self.cache["cdi"] = valor if valor is not None else 13.65
         return self.cache["cdi"]
 

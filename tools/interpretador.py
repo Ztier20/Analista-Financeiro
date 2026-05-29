@@ -111,8 +111,9 @@ class Interpretador:
         dados_yf: Optional[Dict] = None
     ) -> Tuple[str, str]:
         """Interpreta ação brasileira com contexto setorial"""
-        if not dados_yf or not dados_brapi:
+        if not dados_yf:
             return "N/A", "Dados insuficientes"
+        # Nota: brapi é opcional (401 é comum), usa-se apenas yfinance
 
         p_l = dados_yf.get("p_l")
         p_vp = dados_yf.get("p_vp")
@@ -235,9 +236,11 @@ class Interpretador:
             return "N/A", "Dados insuficientes"
 
         performance_1y = dados_yf.get("performance_1y", 0)
-        aum = dados_yf.get("aum", 0)
+        aum = dados_yf.get("aum")
 
-        analise = f"Performance 1y: {performance_1y:.2f}% | Índice: {indice} | AUM: R$ {aum/1e9:.1f}B"
+        # Formatar AUM seguro (pode ser None)
+        aum_str = f"R$ {aum/1e9:.1f}B" if aum else "N/D"
+        analise = f"Performance 1y: {performance_1y:.2f}% | Índice: {indice} | AUM: {aum_str}"
 
         recomendacao = "MANTENHA"
         motivo = f"ETF de renda variável para diversificação; hold para longo prazo"
