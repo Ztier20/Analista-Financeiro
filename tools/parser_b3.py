@@ -4,30 +4,60 @@ from pathlib import Path
 
 def ler_extrato_b3(caminho_arquivo: str) -> dict:
     """
-    Lê o Excel exportado pela B3 e retorna a carteira estruturada
+    Lê o Excel exportado pela B3 e retorna a carteira estruturada.
+    Processa todas as abas do arquivo.
     """
-    df = pd.read_excel(caminho_arquivo, engine="openpyxl")
-
-    # Normalizar colunas
-    df.columns = [col.strip().upper() for col in df.columns]
-
-    # Remover linhas vazias
-    df = df.dropna(how="all")
-
     carteira = []
 
-    for _, row in df.iterrows():
-        produto = str(row.get("PRODUTO", "")).strip()
-        quantidade = row.get("QUANTIDADE", None)
-        preco_medio = row.get("PREÇO MÉDIO", row.get("PRECO MEDIO", None))
-        valor_total = row.get("VALOR ATUALIZADO", row.get("VALOR TOTAL", None))
+    try:
+        # Ler todas as abas
+        excel_file = pd.ExcelFile(caminho_arquivo)
+        abas = excel_file.sheet_names
 
-        ativo = classificar_ativo(produto)
-        if ativo:
-            ativo["quantidade"] = quantidade
-            ativo["preco_medio"] = preco_medio
-            ativo["valor_total"] = valor_total
-            carteira.append(ativo)
+        print(f"   Processando {len(abas)} aba(s)...\n")
+
+        for aba in abas:
+            df = pd.read_excel(caminho_arquivo, sheet_name=aba, engine="openpyxl")
+
+            # Normalizar colunas
+            df.columns = [col.strip().upper() for col in df.columns]
+
+            # Remover linhas vazias
+            df = df.dropna(how="all")
+
+            for _, row in df.iterrows():
+                produto = str(row.get("PRODUTO", "")).strip()
+                quantidade = row.get("QUANTIDADE", None)
+                preco_medio = row.get("PREÇO MÉDIO", row.get("PRECO MEDIO", None))
+                valor_total = row.get("VALOR ATUALIZADO", row.get("VALOR TOTAL", None))
+
+                ativo = classificar_ativo(produto)
+                if ativo:
+                    ativo["quantidade"] = quantidade
+                    ativo["preco_medio"] = preco_medio
+                    ativo["valor_total"] = valor_total
+                    ativo["aba_origem"] = aba
+                    carteira.append(ativo)
+
+    except Exception as e:
+        print(f"   ⚠️  Erro ao ler abas: {e}")
+        # Fallback: tentar ler primeira aba
+        df = pd.read_excel(caminho_arquivo, engine="openpyxl")
+        df.columns = [col.strip().upper() for col in df.columns]
+        df = df.dropna(how="all")
+
+        for _, row in df.iterrows():
+            produto = str(row.get("PRODUTO", "")).strip()
+            quantidade = row.get("QUANTIDADE", None)
+            preco_medio = row.get("PREÇO MÉDIO", row.get("PRECO MEDIO", None))
+            valor_total = row.get("VALOR ATUALIZADO", row.get("VALOR TOTAL", None))
+
+            ativo = classificar_ativo(produto)
+            if ativo:
+                ativo["quantidade"] = quantidade
+                ativo["preco_medio"] = preco_medio
+                ativo["valor_total"] = valor_total
+                carteira.append(ativo)
 
     resultado = organizar_por_classe(carteira)
 
