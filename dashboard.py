@@ -6,6 +6,17 @@ Visualiza análises, recomendações, scores e contexto macroeconômico
 
 import streamlit as st
 import pandas as pd
+import os
+from pathlib import Path
+
+# Carregar .env se existir
+_env_path = Path(__file__).parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
 import plotly.graph_objects as go
 import plotly.express as px
 import tempfile
@@ -24,6 +35,7 @@ from tools.acoes_analytics import analisar_acao_completa
 from tools.renda_fixa_analytics import analisar_rf_completo, CURVA_DI_REFERENCIA
 from tools.historico import salvar_analise, buscar_historico_carteira, buscar_ultima_analise, calcular_variacao_scores, contar_analises
 from tools.alertas import gerar_alertas_tempo_real, resumo_alertas
+from tools.agente import chat_com_agente, gerar_analise_inicial, criar_agente_cliente
 
 
 # Config página
@@ -1517,6 +1529,131 @@ def exibir_alertas_tempo_real(analises, macro_dados):
         st.info("Faça ao menos 2 uploads para ver variações de score.")
 
 
+def exibir_agente_ia(analises, macro_dados):
+    """Aba 14 — Agente Analista IA: chat com contexto completo da carteira"""
+    st.subheader("🤖 Agente Analista IA")
+
+    # Verificar API key
+    client_ok = criar_agente_cliente() is not None
+    if not client_ok:
+        st.error(
+            "**ANTHROPIC_API_KEY não configurada.**\n\n"
+            "Para usar o agente, crie um arquivo `.env` na pasta do projeto com:\n"
+            "```\nANTHROPIC_API_KEY=sua-chave-aqui\n```\n"
+            "Ou configure a variável de ambiente antes de rodar o Streamlit."
+        )
+        st.info("Obtenha sua API key em: https://console.anthropic.com/")
+        return
+
+    # Info do agente
+    with st.expander("ℹ️ Sobre o Agente", expanded=False):
+        st.markdown("""
+        **Perfil configurado:** Moderado | Acumulação de patrimônio + Renda passiva mensal
+
+        O agente tem acesso completo à sua carteira:
+        - Todos os scores e ativos
+        - Dados macroeconômicos atuais (Selic, IPCA, CDI)
+        - Alertas ativos
+        - Distribuição e concentração
+
+        **Exemplos de perguntas:**
+        - "Quais FIIs devo vender agora?"
+        - "Estou muito concentrado em renda fixa?"
+        - "O que comprar para aumentar minha renda passiva?"
+        - "Analise o risco da minha carteira"
+        - "Devo rebalancear? Como?"
+        """)
+
+    st.divider()
+
+    # Inicializar histórico e estado
+    if "agente_historico" not in st.session_state:
+        st.session_state["agente_historico"] = []
+    if "agente_analise_inicial" not in st.session_state:
+        st.session_state["agente_analise_inicial"] = False
+
+    # Botão para limpar conversa
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🗑️ Nova conversa", use_container_width=True):
+            st.session_state["agente_historico"] = []
+            st.session_state["agente_analise_inicial"] = False
+            st.rerun()
+
+    # Exibir histórico de mensagens
+    for msg in st.session_state["agente_historico"]:
+        with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "🤖"):
+            st.markdown(msg["content"])
+
+    # Gerar análise inicial automática
+    if not st.session_state["agente_analise_inicial"]:
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("Analisando sua carteira..."):
+                # Buscar alertas para o contexto
+                try:
+                    alertas = gerar_alertas_tempo_real(analises, macro_dados)
+                except Exception:
+                    alertas = []
+
+                resposta_completa = ""
+                placeholder = st.empty()
+
+                for chunk in gerar_analise_inicial(analises, macro_dados, alertas):
+                    resposta_completa += chunk
+                    placeholder.markdown(resposta_completa + "▌")
+
+                placeholder.markdown(resposta_completa)
+
+        st.session_state["agente_historico"].append({
+            "role": "assistant",
+            "content": resposta_completa
+        })
+        st.session_state["agente_analise_inicial"] = True
+
+    # Input do usuário
+    if pergunta := st.chat_input("Pergunte ao analista sobre sua carteira..."):
+        # Exibir mensagem do usuário
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(pergunta)
+
+        st.session_state["agente_historico"].append({
+            "role": "user",
+            "content": pergunta
+        })
+
+        # Buscar alertas para contexto
+        try:
+            alertas = gerar_alertas_tempo_real(analises, macro_dados)
+        except Exception:
+            alertas = []
+
+        # Resposta do agente em streaming
+        with st.chat_message("assistant", avatar="🤖"):
+            resposta_completa = ""
+            placeholder = st.empty()
+
+            historico_para_api = [
+                msg for msg in st.session_state["agente_historico"][:-1]
+            ]
+
+            for chunk in chat_com_agente(
+                mensagem_usuario=pergunta,
+                historico=historico_para_api,
+                analises=analises,
+                macro_dados=macro_dados,
+                alertas=alertas,
+            ):
+                resposta_completa += chunk
+                placeholder.markdown(resposta_completa + "▌")
+
+            placeholder.markdown(resposta_completa)
+
+        st.session_state["agente_historico"].append({
+            "role": "assistant",
+            "content": resposta_completa
+        })
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -1549,10 +1686,10 @@ def main():
             macro_dados = st.session_state["macro_cache"]
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs(
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14 = st.tabs(
             ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação",
              "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes", "📈 Ações Detalhes", "🏦 Renda Fixa",
-             "📅 Histórico", "🚨 Alertas"]
+             "📅 Histórico", "🚨 Alertas", "🤖 Agente IA"]
         )
 
         with tab1:
@@ -1602,6 +1739,9 @@ def main():
 
         with tab13:
             exibir_alertas_tempo_real(analises, macro_dados)
+
+        with tab14:
+            exibir_agente_ia(analises, macro_dados)
 
         # Rodapé
         st.divider()
