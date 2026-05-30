@@ -15,6 +15,11 @@ from tools.asset_research import analisar_ativo
 from tools.brapi_client import brapi
 from tools.interpretador import Interpretador
 from tools.scorer import calcular_score_por_classe
+from tools.consolidacao import (
+    analisar_concentracao,
+    gerar_alertas_estrategicos,
+    gerar_resumo_consolidado
+)
 
 
 def gerar_relatorio(arquivo_extrato: str):
@@ -129,7 +134,8 @@ def gerar_relatorio(arquivo_extrato: str):
                     "classe": classe,
                     "recomendacao": rec,
                     "analise": anl,
-                    "score": score_info,
+                    "score": score_info.get("score", 5) if score_info else 5,
+                    "valor_total": ativo.get("valor_total", 0),
                     "dados_yf": dados_yf,
                     "dados_brapi": dados_brapi
                 })
@@ -141,14 +147,27 @@ def gerar_relatorio(arquivo_extrato: str):
                     "classe": classe,
                     "recomendacao": "N/A",
                     "analise": f"Erro: {str(e)}",
+                    "valor_total": ativo.get("valor_total", 0),
+                    "score": 0,
                     "erro": str(e)
                 })
 
         print()
 
-    # 5. Gerar markdown e salvar
-    print(f"4️⃣  Gerando relatório markdown...")
-    markdown = gerar_markdown(relatorio_ativos, macro_dados, carteira)
+    # 5. Análise consolidada
+    print(f"4️⃣  Analisando concentração e gerando alertas...")
+    concentracao = analisar_concentracao(carteira, relatorio_ativos)
+    alertas = gerar_alertas_estrategicos(concentracao, relatorio_ativos, macro_dados)
+    resumo_consolidado = gerar_resumo_consolidado(concentracao, alertas, carteira)
+    if alertas:
+        print(f"   ⚠️  {len(alertas)} alerta(s) identificado(s)")
+    else:
+        print(f"   ✓ Carteira bem diversificada")
+    print()
+
+    # 6. Gerar markdown e salvar
+    print(f"5️⃣  Gerando relatório markdown...")
+    markdown = gerar_markdown(relatorio_ativos, macro_dados, carteira, resumo_consolidado)
 
     caminho_relatorio = Path("data/relatorio_analise.md")
     caminho_relatorio.parent.mkdir(exist_ok=True)
@@ -158,7 +177,7 @@ def gerar_relatorio(arquivo_extrato: str):
 
     print(f"   ✓ Salvo em {caminho_relatorio}\n")
 
-    # 6. Resumo final
+    # 7. Resumo final
     print(f"\n" + "=" * 70)
     print(f"✅ ANÁLISE COMPLETA")
     print(f"=" * 70)
@@ -170,7 +189,7 @@ def gerar_relatorio(arquivo_extrato: str):
             print(f"  • {rec}: {qtd}")
 
 
-def gerar_markdown(relatorio: list, macro_dados: dict, carteira: dict) -> str:
+def gerar_markdown(relatorio: list, macro_dados: dict, carteira: dict, resumo_consolidado: str = "") -> str:
     """Gera relatório em Markdown"""
 
     md = f"""# 📊 RELATÓRIO ANALISTA FINANCEIRO
@@ -187,7 +206,13 @@ def gerar_markdown(relatorio: list, macro_dados: dict, carteira: dict) -> str:
 | **Taxa Real (Selic - IPCA)** | {macro_dados.get('selic', 0) - macro_dados.get('ipca_12m', 0):.2f}% |
 | **USD/BRL** | R$ {macro_dados.get('usdbrl', 'N/A'):.2f} |
 
-## 💼 Carteira — {sum(len(v) for v in carteira.values())} Ativos
+"""
+
+    # Adicionar resumo consolidado se disponível
+    if resumo_consolidado:
+        md += resumo_consolidado + "\n"
+
+    md += f"""## 💼 Carteira — {sum(len(v) for v in carteira.values())} Ativos
 
 """
 
@@ -208,9 +233,15 @@ def gerar_markdown(relatorio: list, macro_dados: dict, carteira: dict) -> str:
             ticker = item["ticker"]
             rec = item.get("recomendacao", "N/A")
             anl = item.get("analise", "N/A")
-            score_info = item.get("score", {})
-            score = score_info.get("score", "N/A")
-            categoria = score_info.get("categoria", "N/A")
+
+            # Score pode ser float ou dict
+            score_data = item.get("score")
+            if isinstance(score_data, dict):
+                score = score_data.get("score", "N/A")
+                categoria = score_data.get("categoria", "N/A")
+            else:
+                score = score_data if score_data is not None else "N/A"
+                categoria = "N/A"
 
             # Emoji por recomendação
             emoji = {
@@ -231,9 +262,9 @@ def gerar_markdown(relatorio: list, macro_dados: dict, carteira: dict) -> str:
             md += f"**Categoria:** {categoria} | **Recomendação:** `{rec}`\n\n"
 
             # Detalhes do score
-            if score_info and "detalhes" not in str(score_info):
+            if isinstance(score_data, dict) and "detalhes" not in str(score_data):
                 details = []
-                for k, v in score_info.items():
+                for k, v in score_data.items():
                     if k not in ["score", "categoria", "ticker", "classe", "detalhes"]:
                         details.append(f"- {k}: {v}")
                 if details:
