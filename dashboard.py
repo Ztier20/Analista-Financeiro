@@ -1366,8 +1366,26 @@ def main():
         )
 
     if arquivo:
-        # Processar
-        carteira, analises, macro_dados = processar_carteira(arquivo)
+        # Detectar novo arquivo pelo hash e limpar todos os caches
+        import hashlib
+        file_hash = hashlib.md5(arquivo.getvalue()).hexdigest()
+        if st.session_state.get("_file_hash") != file_hash:
+            for k in ["correlacao_resultado", "risco_resultado", "consolidacao_resultado",
+                      "fii_detalhes_cache", "acoes_detalhes_cache", "rf_detalhes_cache",
+                      "carteira_cache", "analises_cache", "macro_cache"]:
+                st.session_state.pop(k, None)
+            st.session_state["_file_hash"] = file_hash
+
+        # Processar (ou usar cache se mesmo arquivo)
+        if "carteira_cache" not in st.session_state:
+            carteira, analises, macro_dados = processar_carteira(arquivo)
+            st.session_state["carteira_cache"] = carteira
+            st.session_state["analises_cache"] = analises
+            st.session_state["macro_cache"] = macro_dados
+        else:
+            carteira = st.session_state["carteira_cache"]
+            analises = st.session_state["analises_cache"]
+            macro_dados = st.session_state["macro_cache"]
 
         # Tabs
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(
