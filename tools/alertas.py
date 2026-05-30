@@ -147,14 +147,14 @@ def gerar_alertas_tempo_real(
 
     # ── 5. Concentração excessiva em único ativo ─────────────────────────
     total_valor = sum(
-        a.get("valor", 0)
+        (a.get("valor") or 0)
         for ativos_lista in analises.values()
         for a in ativos_lista
     )
     if total_valor > 0:
         for classe, ativos_lista in analises.items():
             for ativo in ativos_lista:
-                pct = (ativo.get("valor", 0) / total_valor) * 100
+                pct = ((ativo.get("valor") or 0) / total_valor) * 100
                 if pct > 20:
                     alertas.append({
                         "tipo": "CONCENTRACAO_EXCESSIVA",
