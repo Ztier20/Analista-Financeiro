@@ -21,6 +21,7 @@ from tools.risco import calcular_risco_carteira
 from tools.consolidacao import analisar_concentracao, gerar_alertas_estrategicos
 from tools.fii_analytics import analisar_fii_completo
 from tools.acoes_analytics import analisar_acao_completa
+from tools.renda_fixa_analytics import analisar_rf_completo, CURVA_DI_REFERENCIA
 
 
 # Config página
@@ -1125,6 +1126,236 @@ def exibir_acoes_detalhes(analises, macro_dados):
             st.markdown(d["resultado"]["analise"])
 
 
+def exibir_renda_fixa_detalhes(carteira, analises, macro_dados):
+    """Aba 11 — Análise detalhada de renda fixa: duration, spread, curva, rating"""
+    st.subheader("🏦 Renda Fixa Detalhes")
+
+    # Classes de renda fixa suportadas
+    CLASSES_RF = {"TESOURO_IPCA", "TESOURO_SELIC", "TESOURO_PREFIXADO",
+                  "RF_CDB", "RF_LCI", "RF_LCA", "RF_CRI", "RF_CRA",
+                  "RF_DEBENTURE", "RF_FIDC", "RENDA_FIXA_PRIVADA"}
+
+    ativos_rf = []
+    for classe, ativos_lista in analises.items():
+        if any(rf in classe.upper() for rf in
+               ["TESOURO", "RF_", "RENDA_FIXA", "CDB", "LCI", "LCA", "CRI", "CRA", "DEBENTURE", "FIDC"]):
+            for a in ativos_lista:
+                ativos_rf.append({**a, "classe": classe})
+
+    if not ativos_rf:
+        st.info("Nenhum ativo de renda fixa encontrado na carteira.")
+        return
+
+    selic = macro_dados.get("selic", 14.4)
+    cdi = macro_dados.get("cdi", 14.35)
+    ipca = macro_dados.get("ipca_12m", 5.5)
+
+    # Filtro
+    tickers_rf = [a["ticker"] for a in ativos_rf]
+    selecionados = st.multiselect(
+        "Filtrar ativos",
+        options=tickers_rf,
+        default=tickers_rf,
+        key="rf_detalhe_filtro"
+    )
+    ativos_filtrados = [a for a in ativos_rf if a["ticker"] in selecionados]
+    if not ativos_filtrados:
+        st.warning("Nenhum ativo selecionado.")
+        return
+
+    # Cache e busca
+    if "rf_detalhes_cache" not in st.session_state:
+        st.session_state["rf_detalhes_cache"] = {}
+
+    dados_completos = []
+    progress = st.progress(0)
+    for i, ativo in enumerate(ativos_filtrados):
+        ticker = ativo["ticker"]
+        classe = ativo["classe"]
+        cache_key = f"{ticker}_{classe}"
+
+        if cache_key not in st.session_state["rf_detalhes_cache"]:
+            resultado = analisar_rf_completo(ticker, classe, macro_dados=macro_dados)
+            st.session_state["rf_detalhes_cache"][cache_key] = resultado
+        else:
+            resultado = st.session_state["rf_detalhes_cache"][cache_key]
+
+        dados_completos.append({
+            "ticker": ticker,
+            "classe": classe,
+            "score": ativo.get("score", {}).get("score", "N/A"),
+            "valor": ativo.get("valor", 0),
+            "resultado": resultado,
+        })
+        progress.progress((i + 1) / len(ativos_filtrados))
+
+    st.divider()
+
+    # ── Seção 1: Tabela resumo ─────────────────────────────────────────────
+    st.subheader("📊 Resumo Comparativo")
+
+    rows = []
+    for d in dados_completos:
+        rd = d["resultado"]["dados"]
+        classif = rd.get("classificacao", {})
+        spread = rd.get("spread", {})
+        dur = rd.get("duration", {})
+        rating = rd.get("rating", {})
+        pos = rd.get("posicao_curva", {})
+
+        rows.append({
+            "Ticker": d["ticker"],
+            "Tipo": classif.get("tipo", "N/A"),
+            "Indexador": classif.get("indexador", "N/A"),
+            "Score": f"{d['score']:.1f}" if isinstance(d["score"], (int, float)) else "N/A",
+            "Taxa (% a.a.)": f"{rd.get('taxa_contratada', 0):.2f}%" if rd.get("taxa_contratada") else "N/A",
+            "Benchmark": f"{rd.get('benchmark_nome','CDI')} {rd.get('benchmark_valor',0):.2f}%",
+            "Spread (bps)": f"{spread.get('spread_bps', 0):+.0f}" if spread.get("spread_bps") is not None else "N/A",
+            "Spread Classif.": spread.get("classificacao", "N/A"),
+            "Duration (anos)": f"{dur.get('duration_anos', 0):.1f}a" if dur.get("duration_anos") else "N/A",
+            "Duration Classif.": dur.get("classificacao", "N/A"),
+            "Rating": rating.get("rating", "N/A"),
+            "FGC": "✅" if classif.get("fgc_coberto") else "❌",
+            "Isento IR": "✅" if classif.get("isento_ir") else "❌",
+            "Posição Curva": f"{pos.get('emoji','')} {pos.get('avaliacao','N/A')}" if pos else "N/A",
+        })
+
+    df_resumo = pd.DataFrame(rows)
+    st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ── Seção 2: Curva de Juros DI Futuro ─────────────────────────────────
+    st.subheader("📉 Curva de Juros (DI Futuro) × Ativos")
+
+    pontos_curva = {
+        "1m": 1/12, "3m": 3/12, "6m": 6/12,
+        "1a": 1, "2a": 2, "3a": 3, "5a": 5, "10a": 10
+    }
+
+    fig_curva = go.Figure()
+
+    # Linha da curva DI
+    x_curva = list(pontos_curva.values())
+    y_curva = [CURVA_DI_REFERENCIA[k] for k in pontos_curva]
+    fig_curva.add_trace(go.Scatter(
+        x=x_curva, y=y_curva,
+        mode="lines+markers",
+        name="Curva DI Futuro",
+        line=dict(color="#3498db", width=2),
+    ))
+
+    # Linha da Selic
+    fig_curva.add_hline(y=selic, line_dash="dash", line_color="red",
+                        annotation_text=f"Selic {selic:.1f}%")
+
+    # Marcar ativos na curva
+    for d in dados_completos:
+        rd = d["resultado"]["dados"]
+        vcto = rd.get("vencimento_anos")
+        taxa = rd.get("taxa_contratada")
+        if vcto and taxa:
+            indexador = rd.get("classificacao", {}).get("indexador", "CDI")
+            # Para IPCA+, plotar como taxa total (IPCA + spread)
+            taxa_plot = taxa + ipca if indexador == "IPCA" else taxa
+            fig_curva.add_trace(go.Scatter(
+                x=[vcto], y=[taxa_plot],
+                mode="markers+text",
+                name=d["ticker"],
+                text=[d["ticker"]],
+                textposition="top center",
+                marker=dict(size=10),
+            ))
+
+    fig_curva.update_layout(
+        title="Curva DI Futuro e posicionamento dos ativos",
+        xaxis_title="Prazo (anos)",
+        yaxis_title="Taxa (% a.a.)",
+        height=450,
+    )
+    st.plotly_chart(fig_curva, use_container_width=True)
+
+    st.divider()
+
+    # ── Seção 3: Spread por ativo ──────────────────────────────────────────
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Spread sobre Benchmark (bps)")
+        df_spread = pd.DataFrame([
+            {
+                "Ticker": d["ticker"],
+                "Spread (bps)": d["resultado"]["dados"].get("spread", {}).get("spread_bps", 0) or 0,
+                "Classificação": d["resultado"]["dados"].get("spread", {}).get("classificacao", "N/A"),
+            }
+            for d in dados_completos if d["resultado"]["dados"].get("spread")
+        ])
+        if not df_spread.empty:
+            fig = px.bar(
+                df_spread.sort_values("Spread (bps)"),
+                x="Spread (bps)", y="Ticker", orientation="h",
+                color="Classificação",
+                color_discrete_map={
+                    "MUITO ALTO": "#e74c3c",
+                    "ALTO": "#e67e22",
+                    "MODERADO": "#f1c40f",
+                    "BAIXO": "#2ecc71",
+                    "ABAIXO DO BENCHMARK": "#95a5a6",
+                },
+                title="Spread vs Benchmark"
+            )
+            fig.add_vline(x=0, line_dash="solid", line_color="gray")
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Duration por Ativo")
+        df_dur = pd.DataFrame([
+            {
+                "Ticker": d["ticker"],
+                "Duration (anos)": d["resultado"]["dados"].get("duration", {}).get("duration_anos", 0) or 0,
+                "Classif.": d["resultado"]["dados"].get("duration", {}).get("classificacao", "N/A"),
+            }
+            for d in dados_completos if d["resultado"]["dados"].get("duration")
+        ])
+        if not df_dur.empty:
+            fig = px.bar(
+                df_dur.sort_values("Duration (anos)"),
+                x="Duration (anos)", y="Ticker", orientation="h",
+                color="Classif.",
+                color_discrete_map={
+                    "CURTÍSSIMA": "#2ecc71",
+                    "CURTA": "#27ae60",
+                    "MÉDIA": "#f39c12",
+                    "LONGA": "#e67e22",
+                    "MUITO LONGA": "#e74c3c",
+                },
+                title="Duration (sensibilidade a juros)"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    # ── Seção 4: Análise textual por ativo ────────────────────────────────
+    st.subheader("💬 Análise por Ativo")
+    for d in dados_completos:
+        classif = d["resultado"]["dados"].get("classificacao", {})
+        tipo = classif.get("tipo", "N/A")
+        score = d["score"]
+        score_str = f"{score:.1f}" if isinstance(score, (int, float)) else "N/A"
+        taxa = d["resultado"]["dados"].get("taxa_contratada")
+        taxa_str = f" | {taxa:.2f}% a.a." if taxa else ""
+
+        with st.expander(f"🏦 {d['ticker']} — {tipo}{taxa_str} | Score {score_str}"):
+            st.markdown(d["resultado"]["analise"])
+
+            # Info extra: FGC + Isento IR
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("FGC", "✅ Coberto" if classif.get("fgc_coberto") else "❌ Não coberto")
+            col_b.metric("Imposto IR", "✅ Isento" if classif.get("isento_ir") else "❌ Tributável")
+            rating = d["resultado"]["dados"].get("rating", {})
+            col_c.metric("Rating Emissor", rating.get("rating", "N/A"))
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -1139,8 +1370,8 @@ def main():
         carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
-            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes", "📈 Ações Detalhes"]
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes", "📈 Ações Detalhes", "🏦 Renda Fixa"]
         )
 
         with tab1:
@@ -1182,6 +1413,9 @@ def main():
         with tab10:
             exibir_acoes_detalhes(analises, macro_dados)
 
+        with tab11:
+            exibir_renda_fixa_detalhes(carteira, analises, macro_dados)
+
         # Rodapé
         st.divider()
         st.caption(
@@ -1211,6 +1445,7 @@ def main():
         - **Gráficos** — Distribuição de scores
         - **FII Detalhes** — CRIs, vacância, FFO, patrimônio por FII
         - **Ações Detalhes** — DRE trimestral, FCF, alavancagem, payout por ação
+        - **Renda Fixa** — Duration, spread, rating, posição na curva de juros
 
         ---
 

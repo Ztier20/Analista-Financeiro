@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 
 from tools.fii_analytics import analisar_fii_completo
 from tools.acoes_analytics import analisar_acao_completa
+from tools.renda_fixa_analytics import analisar_rf_completo
 from tools.macro_data import macro
 
 
@@ -206,42 +207,32 @@ class PesquisadorAtivo:
 
     def _buscar_tesouro(self, titulo: str, classe: str) -> Dict[str, Any]:
         """
-        Tesouro Direto
-        Busca: taxa, duration, posição na curva, comparativo com CDI/IPCA
+        Tesouro Direto — Análise Proativa Detalhada
+        Busca: taxa, duration, spread, posição na curva
         """
         dados = {}
-
-        # Tentar buscar dados do Tesouro Direto (API do BCB)
         try:
-            # Simulação — em produção seria integrado com API do Tesouro
-            dados["tipo"] = classe
-            dados["titulo"] = titulo
-            # Estes dados viriam da API do Tesouro Direto via BCB
-            dados["taxa_compra"] = None
-            dados["taxa_venda"] = None
-            dados["duration"] = None
-
+            macro_dados = macro.obter_todas()
+            analise = analisar_rf_completo(titulo, classe, macro_dados=macro_dados)
+            dados["rf_proativo"] = analise.get("dados", {})
+            dados["rf_analise"] = analise.get("analise")
         except Exception as e:
-            dados["erro"] = str(e)
-
+            dados["erro_rf_proativo"] = str(e)
         return dados
 
     def _buscar_renda_fixa(self, titulo: str, classe: str) -> Dict[str, Any]:
         """
         Renda Fixa Privada (CDB, LCI, LCA, CRI, CRA, Debêntures, FIDC)
-        Busca: taxa, duration, risco de crédito do emissor
+        Busca: taxa, duration, spread sobre CDI/IPCA, rating do emissor
         """
         dados = {}
-
-        tipo = classe.replace("RF_", "")
-        dados["tipo"] = tipo
-        dados["titulo"] = titulo
-        # Dados que viriam de APIs de instituições financeiras
-        dados["taxa"] = None
-        dados["duration"] = None
-        dados["spread_cdi"] = None
-        dados["risco_credito"] = None
-
+        try:
+            macro_dados = macro.obter_todas()
+            analise = analisar_rf_completo(titulo, classe, macro_dados=macro_dados)
+            dados["rf_proativo"] = analise.get("dados", {})
+            dados["rf_analise"] = analise.get("analise")
+        except Exception as e:
+            dados["erro_rf_proativo"] = str(e)
         return dados
 
     def _buscar_generico(self, ticker: str) -> Dict[str, Any]:
