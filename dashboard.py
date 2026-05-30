@@ -19,6 +19,7 @@ from tools.scorer import calcular_score_por_classe
 from tools.correlacao import calcular_correlacao, interpretar_correlacao
 from tools.risco import calcular_risco_carteira
 from tools.consolidacao import analisar_concentracao, gerar_alertas_estrategicos
+from tools.fii_analytics import analisar_fii_completo
 
 
 # Config página
@@ -660,6 +661,243 @@ def exibir_consolidacao(carteira, analises, macro_dados):
     )
 
 
+def exibir_fii_detalhes(carteira, analises, macro_dados):
+    """Aba 9 — Análise detalhada dos FIIs: CRIs, vacância, FFO, patrimônio"""
+    st.subheader("📋 FII Detalhes")
+
+    # Extrair FIIs da carteira
+    fiis = []
+    for classe, ativos_lista in analises.items():
+        if classe == "FII":
+            for a in ativos_lista:
+                fiis.append(a)
+
+    if not fiis:
+        st.info("Nenhum FII encontrado na carteira.")
+        return
+
+    selic = macro_dados.get("selic", 14.4)
+
+    # Filtros
+    col_f1, col_f2 = st.columns([2, 1])
+    with col_f1:
+        tickers_fii = [a["ticker"] for a in fiis]
+        selecionados = st.multiselect(
+            "Filtrar FIIs",
+            options=tickers_fii,
+            default=tickers_fii,
+            key="fii_detalhe_filtro"
+        )
+    with col_f2:
+        mostrar_tipo = st.selectbox(
+            "Tipo",
+            ["Todos", "Papel", "Tijolo"],
+            key="fii_detalhe_tipo"
+        )
+
+    fiis_filtrados = [a for a in fiis if a["ticker"] in selecionados]
+
+    if not fiis_filtrados:
+        st.warning("Nenhum FII selecionado.")
+        return
+
+    # Buscar dados detalhados (com cache na session_state)
+    if "fii_detalhes_cache" not in st.session_state:
+        st.session_state["fii_detalhes_cache"] = {}
+
+    dados_completos = []
+    progress = st.progress(0)
+    for i, ativo in enumerate(fiis_filtrados):
+        ticker = ativo["ticker"]
+        dy = ativo.get("dados_yf", {}).get("dividend_yield", 0)
+        if dy:
+            dy = dy * 100
+
+        if ticker not in st.session_state["fii_detalhes_cache"]:
+            resultado = analisar_fii_completo(ticker, dy_anual=dy, selic=selic)
+            st.session_state["fii_detalhes_cache"][ticker] = resultado
+        else:
+            resultado = st.session_state["fii_detalhes_cache"][ticker]
+
+        dados_completos.append({
+            "ticker": ticker,
+            "score": ativo.get("score", {}).get("score", "N/A"),
+            "valor": ativo.get("valor", 0),
+            "dy": dy,
+            "resultado": resultado
+        })
+        progress.progress((i + 1) / len(fiis_filtrados))
+
+    # Filtro por tipo
+    if mostrar_tipo != "Todos":
+        tipo_map = {"Papel": "papel", "Tijolo": "tijolo"}
+        dados_completos = [
+            d for d in dados_completos
+            if d["resultado"]["dados"].get("tipo") == tipo_map[mostrar_tipo]
+        ]
+
+    st.divider()
+
+    # ── Seção 1: Tabela resumo ─────────────────────────────────────────────
+    st.subheader("📊 Resumo Comparativo")
+
+    rows = []
+    for d in dados_completos:
+        dados = d["resultado"]["dados"]
+        liq = dados.get("liquidez", {})
+        pat = dados.get("patrimonio", {})
+        fcf = dados.get("fluxo_caixa", {})
+        vac = dados.get("vacancia", {})
+        port = dados.get("portfolio_cri", {})
+
+        rows.append({
+            "Ticker": d["ticker"],
+            "Tipo": dados.get("tipo", "N/A").capitalize(),
+            "Score": f"{d['score']:.1f}" if isinstance(d["score"], (int, float)) else "N/A",
+            "DY Anual": f"{d['dy']:.1f}%" if d["dy"] else "N/A",
+            "Liquidez (0-10)": liq.get("liquidity_score", "N/A"),
+            "Vol. Médio/dia": f"R$ {liq['valor_volume_medio']:,.0f}" if liq.get("valor_volume_medio") else "N/A",
+            "Patrimônio Atual": f"R$ {pat['patrimonio_atual']:,.0f}" if pat.get("patrimonio_atual") else "N/A",
+            "Cresc. 12m": f"{pat['crescimento_percentual']:+.1f}%" if pat.get("crescimento_percentual") is not None else "N/A",
+            "FFO/cota": f"R$ {fcf['ffo_por_cota_anual']:.2f}" if fcf.get("ffo_por_cota_anual") else "N/A",
+            "Payout": f"{fcf['payout_ratio']:.0f}%" if fcf.get("payout_ratio") else "N/A",
+            "Sustentab.": fcf.get("sustentabilidade", "N/A"),
+            "Ocupação": f"{vac['ocupacao_estimada']*100:.0f}%" if vac.get("ocupacao_estimada") else "—",
+            "Nº CRIs": port.get("num_cris", "—"),
+            "Duration CRI": f"{port['duration_media_anos']:.1f}a" if port.get("duration_media_anos") else "—",
+        })
+
+    df_resumo = pd.DataFrame(rows)
+    st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ── Seção 2: Gráficos comparativos ───────────────────────────────────
+    col1, col2 = st.columns(2)
+
+    # Liquidez vs DY
+    with col1:
+        st.subheader("Liquidez × DY")
+        df_plot = pd.DataFrame([
+            {
+                "Ticker": d["ticker"],
+                "Liquidez": d["resultado"]["dados"].get("liquidez", {}).get("liquidity_score", 0),
+                "DY (%)": d["dy"] or 0,
+                "Tipo": d["resultado"]["dados"].get("tipo", "N/A")
+            }
+            for d in dados_completos
+        ])
+        if not df_plot.empty:
+            fig = px.scatter(
+                df_plot, x="Liquidez", y="DY (%)",
+                text="Ticker", color="Tipo",
+                title="Liquidez (0-10) × DY Anual",
+                size_max=20
+            )
+            fig.update_traces(textposition="top center")
+            fig.add_hline(y=selic, line_dash="dash", line_color="red",
+                          annotation_text=f"Selic {selic:.1f}%")
+            st.plotly_chart(fig, use_container_width=True)
+
+    # Payout ratio
+    with col2:
+        st.subheader("Payout Ratio (FFO utilizado)")
+        df_payout = pd.DataFrame([
+            {
+                "Ticker": d["ticker"],
+                "Payout (%)": d["resultado"]["dados"].get("fluxo_caixa", {}).get("payout_ratio", 0),
+                "Sustentab.": d["resultado"]["dados"].get("fluxo_caixa", {}).get("sustentabilidade", "N/A")
+            }
+            for d in dados_completos if d["resultado"]["dados"].get("fluxo_caixa")
+        ])
+        if not df_payout.empty:
+            fig = px.bar(
+                df_payout.sort_values("Payout (%)"),
+                x="Payout (%)", y="Ticker", orientation="h",
+                color="Sustentab.",
+                color_discrete_map={
+                    "EXCELENTE": "#2ecc71",
+                    "BOA": "#3498db",
+                    "PREOCUPANTE": "#e74c3c"
+                },
+                title="Payout ratio (< 100% = sustentável)"
+            )
+            fig.add_vline(x=100, line_dash="dash", line_color="red",
+                          annotation_text="100%")
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    # ── Seção 3: Portfólio de CRIs (FIIs de papel) ───────────────────────
+    fiis_papel = [d for d in dados_completos if d["resultado"]["dados"].get("tipo") == "papel"]
+    if fiis_papel:
+        st.subheader("📄 Portfólio de CRIs — FIIs de Papel")
+
+        for d in fiis_papel:
+            port = d["resultado"]["dados"].get("portfolio_cri")
+            if not port:
+                continue
+
+            with st.expander(f"🏦 {d['ticker']} — {port['num_cris']} CRIs | Duration {port['duration_media_anos']:.1f}a"):
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric("Nº de CRIs", port["num_cris"])
+                col_b.metric("Duration Média", f"{port['duration_media_anos']:.1f} anos")
+                risco_cor = {"ALTA": "🔴", "MÉDIA": "🟡", "BAIXA": "🟢"}.get(port["risco_concentracao"], "⚪")
+                col_c.metric("Risco Concentração", f"{risco_cor} {port['risco_concentracao']}")
+
+                st.write(f"**Indexadores:** {', '.join(port['indexadores_principais'])}")
+                st.write(f"**Concentração Top 5:** {port['concentracao_top5']:.0%}")
+
+                if port.get("cris_maiores"):
+                    df_cris = pd.DataFrame(port["cris_maiores"])
+                    df_cris.columns = [c.title() for c in df_cris.columns]
+                    st.dataframe(df_cris, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+    # ── Seção 4: Vacância — FIIs de Tijolo ───────────────────────────────
+    fiis_tijolo = [d for d in dados_completos if d["resultado"]["dados"].get("tipo") == "tijolo"]
+    if fiis_tijolo:
+        st.subheader("🏢 Vacância — FIIs de Tijolo")
+
+        df_vac = pd.DataFrame([
+            {
+                "Ticker": d["ticker"],
+                "Ocupação (%)": d["resultado"]["dados"].get("vacancia", {}).get("ocupacao_estimada", 0) * 100,
+                "Vacância (%)": d["resultado"]["dados"].get("vacancia", {}).get("vacancia_estimada", 0),
+                "Confiança": f"{d['resultado']['dados'].get('vacancia', {}).get('confianca', 0):.0%}"
+            }
+            for d in fiis_tijolo if d["resultado"]["dados"].get("vacancia")
+        ])
+
+        if not df_vac.empty:
+            fig = px.bar(
+                df_vac.sort_values("Ocupação (%)"),
+                x="Ocupação (%)", y="Ticker", orientation="h",
+                color="Ocupação (%)",
+                color_continuous_scale=["#e74c3c", "#f39c12", "#2ecc71"],
+                range_color=[60, 100],
+                title="Taxa de Ocupação (estimada)"
+            )
+            fig.add_vline(x=80, line_dash="dash", line_color="orange",
+                          annotation_text="80% (mínimo saudável)")
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(df_vac, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+    # ── Seção 5: Análise Textual por FII ─────────────────────────────────
+    st.subheader("💬 Análise por FII")
+    for d in dados_completos:
+        tipo = d["resultado"]["dados"].get("tipo", "N/A")
+        emoji_tipo = "📄" if tipo == "papel" else "🏢" if tipo == "tijolo" else "📊"
+        score = d["score"]
+        score_str = f"{score:.1f}" if isinstance(score, (int, float)) else "N/A"
+
+        with st.expander(f"{emoji_tipo} {d['ticker']} | Score {score_str} | DY {d['dy']:.1f}%" if d["dy"] else f"{emoji_tipo} {d['ticker']} | Score {score_str}"):
+            st.markdown(d["resultado"]["analise"])
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -674,8 +912,8 @@ def main():
         carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
-            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada"]
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes"]
         )
 
         with tab1:
@@ -711,6 +949,9 @@ def main():
         with tab8:
             exibir_consolidacao(carteira, analises, macro_dados)
 
+        with tab9:
+            exibir_fii_detalhes(carteira, analises, macro_dados)
+
         # Rodapé
         st.divider()
         st.caption(
@@ -738,6 +979,7 @@ def main():
         - **Ranking** — Ativos ordenados por score
         - **Filtros** — Filtrar por faixa de score
         - **Gráficos** — Distribuição de scores
+        - **FII Detalhes** — CRIs, vacância, FFO, patrimônio por FII
 
         ---
 
