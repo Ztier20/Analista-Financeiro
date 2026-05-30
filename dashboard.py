@@ -38,7 +38,7 @@ st.markdown("Análise acionável com scores de qualidade dos ativos")
 
 def processar_carteira(arquivo):
     """Processa extrato e gera análise completa com scores"""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         temp_path = Path(tmpdir) / arquivo.name
         with open(temp_path, "wb") as f:
             f.write(arquivo.getbuffer())
