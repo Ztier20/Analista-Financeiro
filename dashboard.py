@@ -22,6 +22,8 @@ from tools.consolidacao import analisar_concentracao, gerar_alertas_estrategicos
 from tools.fii_analytics import analisar_fii_completo
 from tools.acoes_analytics import analisar_acao_completa
 from tools.renda_fixa_analytics import analisar_rf_completo, CURVA_DI_REFERENCIA
+from tools.historico import salvar_analise, buscar_historico_carteira, buscar_ultima_analise, calcular_variacao_scores, contar_analises
+from tools.alertas import gerar_alertas_tempo_real, resumo_alertas
 
 
 # Config página
@@ -98,6 +100,13 @@ def processar_carteira(arquivo):
                           "fii_detalhes_cache", "acoes_detalhes_cache", "rf_detalhes_cache"]:
             if cache_key in st.session_state:
                 del st.session_state[cache_key]
+
+        # Salvar histórico de scores
+        try:
+            n = salvar_analise(analises, macro_dados)
+            st.toast(f"✅ {n} scores salvos no histórico", icon="💾")
+        except Exception:
+            pass
 
         return carteira, analises, macro_dados
 
@@ -1356,6 +1365,158 @@ def exibir_renda_fixa_detalhes(carteira, analises, macro_dados):
             col_c.metric("Rating Emissor", rating.get("rating", "N/A"))
 
 
+def exibir_historico():
+    """Aba 12 — Histórico de scores ao longo do tempo"""
+    st.subheader("📈 Histórico de Scores")
+
+    n_analises = contar_analises()
+    if n_analises == 0:
+        st.info("Nenhuma análise salva ainda. Faça upload de extratos para acumular histórico.")
+        return
+
+    st.caption(f"Total de análises salvas: **{n_analises}**")
+
+    # Filtros
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        periodo = st.selectbox("Período", ["7 dias", "30 dias", "90 dias", "180 dias"], index=1)
+    with col2:
+        dias_map = {"7 dias": 7, "30 dias": 30, "90 dias": 90, "180 dias": 180}
+        dias = dias_map[periodo]
+
+    df = buscar_historico_carteira(dias=dias)
+
+    if df.empty:
+        st.warning(f"Sem dados nos últimos {dias} dias.")
+        return
+
+    # Filtro por ticker
+    tickers_disponiveis = sorted(df["ticker"].unique().tolist())
+    tickers_sel = st.multiselect("Filtrar ativos", tickers_disponiveis, default=tickers_disponiveis[:10])
+    df_filtrado = df[df["ticker"].isin(tickers_sel)] if tickers_sel else df
+
+    st.divider()
+
+    # ── Gráfico de linhas: evolução de score ─────────────────────────────
+    st.subheader("Evolução do Score por Ativo")
+    fig = px.line(
+        df_filtrado, x="data", y="score", color="ticker",
+        title=f"Score ao longo do tempo — últimos {dias} dias",
+        labels={"data": "Data", "score": "Score (0-10)", "ticker": "Ativo"}
+    )
+    fig.add_hline(y=7, line_dash="dash", line_color="green",  annotation_text="Bom (7)")
+    fig.add_hline(y=5, line_dash="dash", line_color="orange", annotation_text="Neutro (5)")
+    fig.add_hline(y=3, line_dash="dash", line_color="red",    annotation_text="Crítico (3)")
+    fig.update_layout(height=500)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    # ── Variação desde última análise ────────────────────────────────────
+    st.subheader("Variação vs Análise Anterior")
+    variacoes = calcular_variacao_scores()
+
+    if not variacoes.empty:
+        variacoes_display = variacoes[["ticker", "classe", "score_atual", "score_anterior", "variacao", "variacao_pct"]].copy()
+        variacoes_display.columns = ["Ticker", "Classe", "Score Atual", "Score Anterior", "Variação", "Variação (%)"]
+        variacoes_display = variacoes_display.sort_values("Variação")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            fig_var = px.bar(
+                variacoes_display,
+                x="Variação", y="Ticker", orientation="h",
+                color="Variação",
+                color_continuous_scale=["#e74c3c", "#f39c12", "#2ecc71"],
+                color_continuous_midpoint=0,
+                title="Variação de Score (atual vs anterior)"
+            )
+            fig_var.add_vline(x=0, line_color="gray")
+            st.plotly_chart(fig_var, use_container_width=True)
+
+        with col2:
+            st.dataframe(variacoes_display, use_container_width=True, hide_index=True)
+    else:
+        st.info("É necessário pelo menos 2 análises para calcular variação.")
+
+    st.divider()
+
+    # ── Tabela histórica completa ─────────────────────────────────────────
+    with st.expander("📋 Dados históricos completos"):
+        st.dataframe(df_filtrado.sort_values("data", ascending=False), use_container_width=True, hide_index=True)
+
+
+def exibir_alertas_tempo_real(analises, macro_dados):
+    """Aba 13 — Alertas em tempo real"""
+    st.subheader("🚨 Alertas em Tempo Real")
+
+    with st.spinner("Analisando alertas..."):
+        alertas = gerar_alertas_tempo_real(analises, macro_dados)
+
+    resumo = resumo_alertas(alertas)
+
+    # Cards de resumo
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("🔴 Críticos",  resumo.get("CRÍTICA", 0))
+    col2.metric("🟠 Altos",     resumo.get("ALTA", 0))
+    col3.metric("🟡 Médios",    resumo.get("MÉDIA", 0))
+    col4.metric("🟢 Baixos",    resumo.get("BAIXA", 0))
+
+    st.divider()
+
+    if not alertas:
+        st.success("✅ Nenhum alerta detectado — carteira em bom estado!")
+        return
+
+    # Filtro por severidade
+    severidades = ["Todas", "CRÍTICA", "ALTA", "MÉDIA", "BAIXA"]
+    sev_sel = st.selectbox("Filtrar por severidade", severidades)
+
+    alertas_filtrados = alertas if sev_sel == "Todas" else [a for a in alertas if a["severidade"] == sev_sel]
+
+    # Exibir alertas
+    for alerta in alertas_filtrados:
+        sev = alerta["severidade"]
+        emoji = {"CRÍTICA": "🔴", "ALTA": "🟠", "MÉDIA": "🟡", "BAIXA": "🟢"}.get(sev, "⚪")
+
+        with st.container(border=True):
+            col_e, col_t = st.columns([1, 10])
+            with col_e:
+                st.markdown(f"## {emoji}")
+            with col_t:
+                st.markdown(f"**{alerta['titulo']}** — `{alerta['ticker']}` ({alerta['classe']})")
+                st.markdown(alerta["descricao"])
+                st.markdown(f"➡️ *{alerta['recomendacao']}*")
+
+    st.divider()
+
+    # Histórico de alertas (variação de scores)
+    st.subheader("📊 Histórico de Variações de Score")
+    variacoes = calcular_variacao_scores()
+    if not variacoes.empty:
+        quedas = variacoes[variacoes["variacao"] < 0].sort_values("variacao")
+        altas  = variacoes[variacoes["variacao"] > 0].sort_values("variacao", ascending=False)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**📉 Maiores quedas**")
+            if not quedas.empty:
+                st.dataframe(quedas[["ticker", "score_atual", "score_anterior", "variacao"]].head(10),
+                             use_container_width=True, hide_index=True)
+            else:
+                st.success("Sem quedas de score")
+        with col2:
+            st.markdown("**📈 Maiores altas**")
+            if not altas.empty:
+                st.dataframe(altas[["ticker", "score_atual", "score_anterior", "variacao"]].head(10),
+                             use_container_width=True, hide_index=True)
+            else:
+                st.info("Sem altas de score")
+    else:
+        st.info("Faça ao menos 2 uploads para ver variações de score.")
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -1388,8 +1549,10 @@ def main():
             macro_dados = st.session_state["macro_cache"]
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(
-            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes", "📈 Ações Detalhes", "🏦 Renda Fixa"]
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação",
+             "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes", "📈 Ações Detalhes", "🏦 Renda Fixa",
+             "📅 Histórico", "🚨 Alertas"]
         )
 
         with tab1:
@@ -1433,6 +1596,12 @@ def main():
 
         with tab11:
             exibir_renda_fixa_detalhes(carteira, analises, macro_dados)
+
+        with tab12:
+            exibir_historico()
+
+        with tab13:
+            exibir_alertas_tempo_real(analises, macro_dados)
 
         # Rodapé
         st.divider()
