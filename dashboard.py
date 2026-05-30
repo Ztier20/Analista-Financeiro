@@ -18,6 +18,7 @@ from tools.asset_research import analisar_ativo
 from tools.scorer import calcular_score_por_classe
 from tools.correlacao import calcular_correlacao, interpretar_correlacao
 from tools.risco import calcular_risco_carteira
+from tools.consolidacao import analisar_concentracao, gerar_alertas_estrategicos
 
 
 # Config página
@@ -94,6 +95,8 @@ def processar_carteira(arquivo):
             del st.session_state["correlacao_resultado"]
         if "risco_resultado" in st.session_state:
             del st.session_state["risco_resultado"]
+        if "consolidacao_resultado" in st.session_state:
+            del st.session_state["consolidacao_resultado"]
 
         return carteira, analises, macro_dados
 
@@ -508,6 +511,155 @@ def exibir_risco(carteira, macro_dados):
     )
 
 
+def exibir_consolidacao(carteira, analises, macro_dados):
+    """Exibe análise consolidada da carteira"""
+
+    # Preparar relatorio_ativos para consolidacao.py
+    relatorio_ativos = []
+    for classe, analise_list in analises.items():
+        for analise in analise_list:
+            score_val = analise["score"].get("score", 0) if isinstance(analise["score"], dict) else analise["score"]
+            try:
+                score_num = float(score_val) if score_val != "N/A" else 0
+            except:
+                score_num = 0
+
+            relatorio_ativos.append({
+                "ticker": analise["ticker"],
+                "classe": analise["classe"],
+                "valor_total": analise.get("valor", 0),
+                "score": score_num,
+                "recomendacao": "MANTENHA"
+            })
+
+    # Calcular concentração
+    concentracao = analisar_concentracao(carteira, relatorio_ativos)
+
+    if not concentracao:
+        st.error("❌ Dados insuficientes para análise consolidada")
+        return
+
+    # Alertas
+    alertas = gerar_alertas_estrategicos(concentracao, relatorio_ativos, macro_dados)
+
+    # Seção 1: Métricas principais
+    st.subheader("📊 Visão Geral da Carteira")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total de Ativos", concentracao["num_ativos"])
+    col2.metric("Classes", concentracao["num_classes"])
+    col3.metric("Valor Total", f"R$ {concentracao['valor_total_carteira']:,.0f}")
+    col4.metric("Herfindahl", f"{concentracao['metricas']['indice_herfindahl']:.0f}")
+
+    st.divider()
+
+    # Seção 2: Concentração por Classe (Pizza)
+    st.subheader("💼 Distribuição por Classe")
+    conc_classe = concentracao["concentracao_por_classe"]
+
+    if not conc_classe.empty:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            fig_pizza = px.pie(
+                values=conc_classe["valor"],
+                names=conc_classe.index,
+                title="% da Carteira",
+                labels={"value": "Valor (R$)", "index": "Classe"}
+            )
+            st.plotly_chart(fig_pizza, use_container_width=True)
+
+        with col2:
+            st.dataframe(
+                conc_classe[["valor", "quantidade", "percentual"]].rename(
+                    columns={"valor": "Valor (R$)", "quantidade": "Qty", "percentual": "%"}
+                ),
+                use_container_width=True
+            )
+
+    st.divider()
+
+    # Seção 3: Top 10 Ativos
+    st.subheader("🏆 Top 10 Maiores Posições")
+
+    top10 = concentracao["top_10_ativos"].copy()
+    top10_display = top10[["ticker", "classe", "valor_total", "percentual", "score"]].copy()
+    top10_display.columns = ["Ticker", "Classe", "Valor (R$)", "%", "Score"]
+    top10_display["Valor (R$)"] = top10_display["Valor (R$)"].apply(lambda x: f"R$ {x:,.2f}")
+    top10_display["%"] = top10_display["%"].apply(lambda x: f"{x:.1f}%")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.dataframe(top10_display, use_container_width=True, hide_index=True)
+
+    with col2:
+        fig_top10 = px.bar(
+            top10.sort_values("valor_total"),
+            x="valor_total",
+            y="ticker",
+            orientation="h",
+            title="Maiores Posições",
+            labels={"valor_total": "Valor (R$)", "ticker": ""}
+        )
+        fig_top10.update_layout(height=400)
+        st.plotly_chart(fig_top10, use_container_width=True)
+
+    st.divider()
+
+    # Seção 4: Métricas de Concentração
+    st.subheader("📈 Análise de Concentração")
+    metricas = concentracao["metricas"]
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Top 1", f"{metricas['concentracao_top_1']:.1f}%", delta="Recomendado < 15%")
+    col2.metric("Top 5", f"{metricas['concentracao_top_5']:.1f}%", delta="Recomendado < 50%")
+    col3.metric("Top 10", f"{metricas['concentracao_top_10']:.1f}%")
+    col4.metric("Herfindahl", f"{metricas['indice_herfindahl']:.0f}", delta="< 2000 = bem diversificada")
+
+    st.divider()
+
+    # Seção 5: Alertas
+    st.subheader("⚠️ Alertas Estratégicos")
+
+    if alertas:
+        for alerta in alertas:
+            severidade = alerta["severidade"]
+            emoji_sev = {"CRÍTICA": "🔴", "ALTA": "🟠", "MÉDIA": "🟡", "BAIXA": "🟢"}.get(severidade, "⚪")
+
+            # Cores para o container
+            color_map = {
+                "CRÍTICA": "#fee",
+                "ALTA": "#fef3cd",
+                "MÉDIA": "#fff3cd",
+                "BAIXA": "#d4edda"
+            }
+            color = color_map.get(severidade, "#f0f0f0")
+
+            with st.container(border=True):
+                st.markdown(f"### {emoji_sev} {alerta['titulo']} ({severidade})")
+                st.markdown(alerta["descricao"])
+                st.markdown(f"**→ {alerta['recomendacao']}**")
+    else:
+        st.success("✅ Carteira bem diversificada! Sem alertas críticos.")
+
+    st.divider()
+
+    # Interpretação
+    st.info(
+        """
+        **Como ler a concentração:**
+        - **Top 1 > 30%**: ⚠️ Concentração crítica
+        - **Top 5 > 50%**: Carteira pouco diversificada
+        - **Herfindahl**: 0 (máxima diversificação) a 10.000 (concentração total)
+          - < 2.000: Bem diversificada
+          - 2.000-3.000: Razoável
+          - > 3.000: Concentrada
+
+        **Recomendação**: Considere rebalancear se houver alertas críticos
+        """
+    )
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -522,8 +674,8 @@ def main():
         carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
-            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco"]
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada"]
         )
 
         with tab1:
@@ -555,6 +707,9 @@ def main():
 
         with tab7:
             exibir_risco(carteira, macro_dados)
+
+        with tab8:
+            exibir_consolidacao(carteira, analises, macro_dados)
 
         # Rodapé
         st.divider()
