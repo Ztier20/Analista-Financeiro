@@ -94,12 +94,10 @@ def processar_carteira(arquivo):
                 progress_bar.progress(contador / total_ativos)
 
         # Invalidar caches para novo upload
-        if "correlacao_resultado" in st.session_state:
-            del st.session_state["correlacao_resultado"]
-        if "risco_resultado" in st.session_state:
-            del st.session_state["risco_resultado"]
-        if "consolidacao_resultado" in st.session_state:
-            del st.session_state["consolidacao_resultado"]
+        for cache_key in ["correlacao_resultado", "risco_resultado", "consolidacao_resultado",
+                          "fii_detalhes_cache", "acoes_detalhes_cache", "rf_detalhes_cache"]:
+            if cache_key in st.session_state:
+                del st.session_state[cache_key]
 
         return carteira, analises, macro_dados
 
