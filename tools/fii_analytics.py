@@ -168,24 +168,24 @@ def buscar_patrimonio_historico(ticker: str) -> Dict:
         # Em produção, isso viria de CVM API ou web scraping de relatórios
 
         fii_data = {
-            "DEVA11": {
-                "patrimonio_atual": 450_000_000,
-                "patrimonio_12m": 420_000_000,
-                "cotistas": 15000,
-                "patrimonio_por_cota": 30.0
-            },
-            "MXRF11": {
-                "patrimonio_atual": 380_000_000,
-                "patrimonio_12m": 360_000_000,
-                "cotistas": 12000,
-                "patrimonio_por_cota": 31.67
-            },
-            "RBRY11": {
-                "patrimonio_atual": 320_000_000,
-                "patrimonio_12m": 305_000_000,
-                "cotistas": 10000,
-                "patrimonio_por_cota": 32.0
-            }
+            # FIIs de Papel
+            "DEVA11": {"patrimonio_atual": 450_000_000,  "patrimonio_12m": 420_000_000,  "cotistas": 15000, "patrimonio_por_cota": 30.0},
+            "MXRF11": {"patrimonio_atual": 3_800_000_000,"patrimonio_12m": 3_600_000_000,"cotistas": 850000,"patrimonio_por_cota": 10.4},
+            "RBRY11": {"patrimonio_atual": 320_000_000,  "patrimonio_12m": 305_000_000,  "cotistas": 10000, "patrimonio_por_cota": 32.0},
+            "BTHF11": {"patrimonio_atual": 1_200_000_000,"patrimonio_12m": 1_100_000_000,"cotistas": 45000, "patrimonio_por_cota": 96.5},
+            "CNES11": {"patrimonio_atual": 280_000_000,  "patrimonio_12m": 260_000_000,  "cotistas": 9000,  "patrimonio_por_cota": 9.8},
+            "KISU11": {"patrimonio_atual": 850_000_000,  "patrimonio_12m": 820_000_000,  "cotistas": 28000, "patrimonio_por_cota": 97.2},
+            "KNSC11": {"patrimonio_atual": 2_100_000_000,"patrimonio_12m": 1_950_000_000,"cotistas": 72000, "patrimonio_por_cota": 103.5},
+            "RECT11": {"patrimonio_atual": 620_000_000,  "patrimonio_12m": 590_000_000,  "cotistas": 22000, "patrimonio_por_cota": 7.9},
+            "VGHF11": {"patrimonio_atual": 1_500_000_000,"patrimonio_12m": 1_420_000_000,"cotistas": 55000, "patrimonio_por_cota": 10.8},
+            "VINO11": {"patrimonio_atual": 980_000_000,  "patrimonio_12m": 920_000_000,  "cotistas": 32000, "patrimonio_por_cota": 10.2},
+            "XPSF11": {"patrimonio_atual": 750_000_000,  "patrimonio_12m": 710_000_000,  "cotistas": 25000, "patrimonio_por_cota": 9.6},
+            # FIIs de Tijolo
+            "SNAG11": {"patrimonio_atual": 420_000_000,  "patrimonio_12m": 400_000_000,  "cotistas": 14000, "patrimonio_por_cota": 108.5},
+            "SNFF11": {"patrimonio_atual": 310_000_000,  "patrimonio_12m": 305_000_000,  "cotistas": 10500, "patrimonio_por_cota": 96.2},
+            "BRCR11": {"patrimonio_atual": 1_800_000_000,"patrimonio_12m": 1_850_000_000,"cotistas": 62000, "patrimonio_por_cota": 74.3},
+            "RZAG11": {"patrimonio_atual": 380_000_000,  "patrimonio_12m": 360_000_000,  "cotistas": 13000, "patrimonio_por_cota": 107.8},
+            "VGIA11": {"patrimonio_atual": 560_000_000,  "patrimonio_12m": 530_000_000,  "cotistas": 18500, "patrimonio_por_cota": 105.2},
         }
 
         if ticker not in fii_data:
@@ -225,11 +225,21 @@ def estimar_vacancia_fii_tijolo(ticker: str) -> Dict:
     try:
         # Dados simulados para FIIs de tijolo conhecidos
         vacancia_data = {
-            "SNAG11": {"ocupacao": 0.92, "confianca": 0.85},  # 92% ocupação
-            "RZAG11": {"ocupacao": 0.88, "confianca": 0.80},  # 88%
-            "VGIA11": {"ocupacao": 0.95, "confianca": 0.88},  # 95%
-            "BRCR11": {"ocupacao": 0.75, "confianca": 0.70},  # 75% (varejo com dificuldades)
-            "SNFF11": {"ocupacao": 0.72, "confianca": 0.75},  # 72%
+            "SNAG11": {"ocupacao": 0.92, "confianca": 0.85},
+            "RZAG11": {"ocupacao": 0.88, "confianca": 0.80},
+            "VGIA11": {"ocupacao": 0.95, "confianca": 0.88},
+            "BRCR11": {"ocupacao": 0.75, "confianca": 0.70},
+            "SNFF11": {"ocupacao": 0.72, "confianca": 0.75},
+            "HGLG11": {"ocupacao": 0.97, "confianca": 0.90},
+            "BRCO11": {"ocupacao": 0.96, "confianca": 0.88},
+            "BTLG11": {"ocupacao": 0.95, "confianca": 0.87},
+            "LVBI11": {"ocupacao": 0.94, "confianca": 0.85},
+            "XPML11": {"ocupacao": 0.93, "confianca": 0.88},
+            "HSML11": {"ocupacao": 0.91, "confianca": 0.85},
+            "VISC11": {"ocupacao": 0.92, "confianca": 0.87},
+            "PVBI11": {"ocupacao": 0.89, "confianca": 0.82},
+            "RBRP11": {"ocupacao": 0.85, "confianca": 0.78},
+            "TRXF11": {"ocupacao": 0.94, "confianca": 0.86},
         }
 
         if ticker not in vacancia_data:
@@ -266,32 +276,86 @@ def buscar_portfoglio_cri_fii_papel(ticker: str) -> Dict:
         # Dados simulados para FIIs de papel conhecidos
         portfolio_data = {
             "DEVA11": {
-                "num_cris": 12,
-                "indexadores": ["IPCA+3%", "IPCA+4%", "CDI+1.2%"],
-                "duration_media": 3.5,
-                "top5_concentracao": 0.45,
+                "num_cris": 12, "indexadores": ["IPCA+3%", "IPCA+4%", "CDI+1.2%"],
+                "duration_media": 3.5, "top5_concentracao": 0.45,
                 "cris_exemplo": [
-                    {"nome": "CRI Gafisa", "indexador": "IPCA+3.5%", "vencimento": "2029", "peso": 0.12},
-                    {"nome": "CRI Loggi", "indexador": "CDI+1.2%", "vencimento": "2027", "peso": 0.10},
-                    {"nome": "CRI ABC", "indexador": "IPCA+4%", "vencimento": "2031", "peso": 0.09},
+                    {"nome": "CRI Gafisa",  "indexador": "IPCA+3.5%", "vencimento": "2029", "peso": 0.12},
+                    {"nome": "CRI Loggi",   "indexador": "CDI+1.2%",  "vencimento": "2027", "peso": 0.10},
+                    {"nome": "CRI ABC",     "indexador": "IPCA+4%",   "vencimento": "2031", "peso": 0.09},
                 ]
             },
             "MXRF11": {
-                "num_cris": 15,
-                "indexadores": ["CDI+1.5%", "CDI+2%", "IPCA+3%"],
-                "duration_media": 2.8,
-                "top5_concentracao": 0.38,
+                "num_cris": 15, "indexadores": ["CDI+1.5%", "CDI+2%", "IPCA+3%"],
+                "duration_media": 2.8, "top5_concentracao": 0.38,
                 "cris_exemplo": [
                     {"nome": "CRI Camargo", "indexador": "CDI+1.8%", "vencimento": "2028", "peso": 0.11},
                 ]
             },
             "RBRY11": {
-                "num_cris": 10,
-                "indexadores": ["IPCA+3.2%", "IPCA+4.5%"],
-                "duration_media": 4.2,
-                "top5_concentracao": 0.52,
+                "num_cris": 10, "indexadores": ["IPCA+3.2%", "IPCA+4.5%"],
+                "duration_media": 4.2, "top5_concentracao": 0.52,
                 "cris_exemplo": []
-            }
+            },
+            "BTHF11": {
+                "num_cris": 18, "indexadores": ["CDI+1.8%", "CDI+2.2%", "IPCA+3.5%"],
+                "duration_media": 2.5, "top5_concentracao": 0.35,
+                "cris_exemplo": [
+                    {"nome": "CRI Direcional", "indexador": "CDI+2%",    "vencimento": "2028", "peso": 0.10},
+                    {"nome": "CRI MRV",        "indexador": "CDI+1.8%",  "vencimento": "2027", "peso": 0.09},
+                ]
+            },
+            "CNES11": {
+                "num_cris": 8, "indexadores": ["IPCA+4%", "IPCA+5%"],
+                "duration_media": 4.8, "top5_concentracao": 0.62,
+                "cris_exemplo": [
+                    {"nome": "CRI Incorporadora A", "indexador": "IPCA+4.5%", "vencimento": "2030", "peso": 0.18},
+                ]
+            },
+            "KISU11": {
+                "num_cris": 14, "indexadores": ["CDI+1.5%", "CDI+2%"],
+                "duration_media": 3.0, "top5_concentracao": 0.42,
+                "cris_exemplo": [
+                    {"nome": "CRI Multiplan",  "indexador": "CDI+1.5%", "vencimento": "2028", "peso": 0.12},
+                    {"nome": "CRI Iguatemi",   "indexador": "CDI+2%",   "vencimento": "2029", "peso": 0.10},
+                ]
+            },
+            "KNSC11": {
+                "num_cris": 20, "indexadores": ["IPCA+3.5%", "IPCA+4%", "CDI+1.5%"],
+                "duration_media": 3.8, "top5_concentracao": 0.32,
+                "cris_exemplo": [
+                    {"nome": "CRI Brookfield", "indexador": "IPCA+3.8%", "vencimento": "2031", "peso": 0.09},
+                    {"nome": "CRI Trisul",     "indexador": "IPCA+4%",   "vencimento": "2030", "peso": 0.08},
+                ]
+            },
+            "RECT11": {
+                "num_cris": 11, "indexadores": ["CDI+2%", "CDI+2.5%", "IPCA+4%"],
+                "duration_media": 2.2, "top5_concentracao": 0.48,
+                "cris_exemplo": [
+                    {"nome": "CRI Jhsf",  "indexador": "CDI+2.2%",  "vencimento": "2027", "peso": 0.13},
+                ]
+            },
+            "VGHF11": {
+                "num_cris": 16, "indexadores": ["CDI+1.8%", "CDI+2%", "IPCA+3%"],
+                "duration_media": 2.9, "top5_concentracao": 0.36,
+                "cris_exemplo": [
+                    {"nome": "CRI Helbor",  "indexador": "CDI+2%",   "vencimento": "2028", "peso": 0.10},
+                    {"nome": "CRI Even",    "indexador": "IPCA+3%",  "vencimento": "2029", "peso": 0.09},
+                ]
+            },
+            "VINO11": {
+                "num_cris": 13, "indexadores": ["CDI+1.5%", "CDI+2%"],
+                "duration_media": 3.1, "top5_concentracao": 0.40,
+                "cris_exemplo": [
+                    {"nome": "CRI Cyrela",  "indexador": "CDI+1.8%", "vencimento": "2028", "peso": 0.11},
+                ]
+            },
+            "XPSF11": {
+                "num_cris": 12, "indexadores": ["CDI+1.8%", "IPCA+3.5%"],
+                "duration_media": 2.7, "top5_concentracao": 0.44,
+                "cris_exemplo": [
+                    {"nome": "CRI Eztec",  "indexador": "CDI+1.8%", "vencimento": "2028", "peso": 0.12},
+                ]
+            },
         }
 
         if ticker not in portfolio_data:
@@ -328,33 +392,39 @@ def buscar_fluxo_caixa_fii(ticker: str) -> Dict:
     try:
         # Dados simulados baseados em 1 ano de dados reais
         fcf_data = {
-            "DEVA11": {
-                "ffo_por_cota": 1.85,
-                "distribuicao_por_cota": 1.82,
-                "ultimas_12m": [
-                    {"mes": "maio/2026", "valor": 0.158},
-                    {"mes": "abril/2026", "valor": 0.156},
-                    {"mes": "março/2026", "valor": 0.157},
-                ],
-                "coverage": 0.98  # 98% pago, 2% retido
-            },
-            "MXRF11": {
-                "ffo_por_cota": 2.10,
-                "distribuicao_por_cota": 2.08,
-                "ultimas_12m": [
-                    {"mes": "maio/2026", "valor": 0.173},
-                    {"mes": "abril/2026", "valor": 0.174},
-                ],
-                "coverage": 0.99
-            },
-            "RBRY11": {
-                "ffo_por_cota": 1.95,
-                "distribuicao_por_cota": 1.92,
-                "ultimas_12m": [
-                    {"mes": "maio/2026", "valor": 0.160},
-                ],
-                "coverage": 0.98
-            }
+            "DEVA11": {"ffo_por_cota": 1.85,  "distribuicao_por_cota": 1.82,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.158}, {"mes": "abr/26", "valor": 0.156}, {"mes": "mar/26", "valor": 0.157}]},
+            "MXRF11": {"ffo_por_cota": 2.10,  "distribuicao_por_cota": 2.08,  "coverage": 0.99,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.173}, {"mes": "abr/26", "valor": 0.174}, {"mes": "mar/26", "valor": 0.172}]},
+            "RBRY11": {"ffo_por_cota": 1.95,  "distribuicao_por_cota": 1.92,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.160}, {"mes": "abr/26", "valor": 0.161}, {"mes": "mar/26", "valor": 0.159}]},
+            "BTHF11": {"ffo_por_cota": 9.80,  "distribuicao_por_cota": 9.75,  "coverage": 0.99,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.812}, {"mes": "abr/26", "valor": 0.815}, {"mes": "mar/26", "valor": 0.808}]},
+            "CNES11": {"ffo_por_cota": 1.28,  "distribuicao_por_cota": 1.25,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.105}, {"mes": "abr/26", "valor": 0.104}, {"mes": "mar/26", "valor": 0.106}]},
+            "KISU11": {"ffo_por_cota": 10.70, "distribuicao_por_cota": 10.60, "coverage": 0.99,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.887}, {"mes": "abr/26", "valor": 0.885}, {"mes": "mar/26", "valor": 0.882}]},
+            "KNSC11": {"ffo_por_cota": 11.60, "distribuicao_por_cota": 11.50, "coverage": 0.99,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.965}, {"mes": "abr/26", "valor": 0.960}, {"mes": "mar/26", "valor": 0.955}]},
+            "RECT11": {"ffo_por_cota": 1.01,  "distribuicao_por_cota": 0.99,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.083}, {"mes": "abr/26", "valor": 0.082}, {"mes": "mar/26", "valor": 0.083}]},
+            "VGHF11": {"ffo_por_cota": 1.25,  "distribuicao_por_cota": 1.23,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.103}, {"mes": "abr/26", "valor": 0.102}, {"mes": "mar/26", "valor": 0.103}]},
+            "VINO11": {"ffo_por_cota": 1.17,  "distribuicao_por_cota": 1.15,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.097}, {"mes": "abr/26", "valor": 0.096}, {"mes": "mar/26", "valor": 0.097}]},
+            "XPSF11": {"ffo_por_cota": 1.14,  "distribuicao_por_cota": 1.12,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.094}, {"mes": "abr/26", "valor": 0.093}, {"mes": "mar/26", "valor": 0.094}]},
+            # Tijolo
+            "SNAG11": {"ffo_por_cota": 11.40, "distribuicao_por_cota": 11.20, "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.938}, {"mes": "abr/26", "valor": 0.935}, {"mes": "mar/26", "valor": 0.930}]},
+            "SNFF11": {"ffo_por_cota": 9.50,  "distribuicao_por_cota": 9.20,  "coverage": 0.97,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.773}, {"mes": "abr/26", "valor": 0.770}, {"mes": "mar/26", "valor": 0.768}]},
+            "BRCR11": {"ffo_por_cota": 7.05,  "distribuicao_por_cota": 6.90,  "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.578}, {"mes": "abr/26", "valor": 0.575}, {"mes": "mar/26", "valor": 0.572}]},
+            "RZAG11": {"ffo_por_cota": 11.62, "distribuicao_por_cota": 11.40, "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.952}, {"mes": "abr/26", "valor": 0.950}, {"mes": "mar/26", "valor": 0.948}]},
+            "VGIA11": {"ffo_por_cota": 10.73, "distribuicao_por_cota": 10.50, "coverage": 0.98,
+                       "ultimas_12m": [{"mes": "mai/26", "valor": 0.879}, {"mes": "abr/26", "valor": 0.875}, {"mes": "mar/26", "valor": 0.872}]},
         }
 
         if ticker not in fcf_data:
