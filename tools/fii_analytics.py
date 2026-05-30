@@ -13,16 +13,67 @@ import json
 
 # FIIs conhecidos com suas características
 FIIS_CONHECIDOS = {
+    # ── FIIs de Papel ────────────────────────────────────────────────────
     "DEVA11": {"tipo": "papel", "indexador": "IPCA", "gestor": "Devant"},
-    "MXRF11": {"tipo": "papel", "indexador": "CDI", "gestor": "Maxxima"},
+    "MXRF11": {"tipo": "papel", "indexador": "CDI",  "gestor": "Maxxima"},
     "RBRY11": {"tipo": "papel", "indexador": "IPCA", "gestor": "Rio Bravo"},
-    "VGHF11": {"tipo": "papel", "indexador": "CDI", "gestor": "Vinci"},
+    "VGHF11": {"tipo": "papel", "indexador": "CDI",  "gestor": "Vinci"},
     "KNSC11": {"tipo": "papel", "indexador": "IPCA", "gestor": "Kinea"},
-    "SNAG11": {"tipo": "tijolo", "segmento": "logistica", "gestor": "Sensia"},
-    "RZAG11": {"tipo": "tijolo", "segmento": "logistica", "gestor": "Riza"},
-    "VGIA11": {"tipo": "tijolo", "segmento": "logistica", "gestor": "Vinci"},
-    "BRCR11": {"tipo": "tijolo", "segmento": "varejo", "gestor": "Br Properties"},
-    "SNFF11": {"tipo": "tijolo", "segmento": "varejo", "gestor": "Sensia"},
+    "KISU11": {"tipo": "papel", "indexador": "CDI",  "gestor": "Kinea"},
+    "RECT11": {"tipo": "papel", "indexador": "CDI",  "gestor": "REC Gestão"},
+    "BTHF11": {"tipo": "papel", "indexador": "CDI",  "gestor": "BTG Pactual"},
+    "VINO11": {"tipo": "papel", "indexador": "CDI",  "gestor": "Vinci"},
+    "CNES11": {"tipo": "papel", "indexador": "IPCA", "gestor": "Canê Investimentos"},
+    "XPSL11": {"tipo": "papel", "indexador": "CDI",  "gestor": "XP Asset"},
+    "HGCR11": {"tipo": "papel", "indexador": "IPCA", "gestor": "CSHG"},
+    "VRTA11": {"tipo": "papel", "indexador": "IPCA", "gestor": "Fator"},
+    "IRDM11": {"tipo": "papel", "indexador": "CDI",  "gestor": "Iridium"},
+    "CVBI11": {"tipo": "papel", "indexador": "CDI",  "gestor": "CVB"},
+    "BCRI11": {"tipo": "papel", "indexador": "CDI",  "gestor": "Ourinvest"},
+    # ── FIIs de Tijolo ───────────────────────────────────────────────────
+    "SNAG11": {"tipo": "tijolo", "segmento": "logistica",   "gestor": "Sensia"},
+    "RZAG11": {"tipo": "tijolo", "segmento": "logistica",   "gestor": "Riza"},
+    "VGIA11": {"tipo": "tijolo", "segmento": "logistica",   "gestor": "Vinci"},
+    "BRCR11": {"tipo": "tijolo", "segmento": "lajes",       "gestor": "BR Properties"},
+    "SNFF11": {"tipo": "tijolo", "segmento": "varejo",      "gestor": "Sensia"},
+    "HGLG11": {"tipo": "tijolo", "segmento": "logistica",   "gestor": "CSHG"},
+    "BRCO11": {"tipo": "tijolo", "segmento": "logistica",   "gestor": "Bresco"},
+    "XPML11": {"tipo": "tijolo", "segmento": "shopping",    "gestor": "XP Asset"},
+    "HSML11": {"tipo": "tijolo", "segmento": "shopping",    "gestor": "HSI"},
+    "VISC11": {"tipo": "tijolo", "segmento": "shopping",    "gestor": "Vinci"},
+    "PVBI11": {"tipo": "tijolo", "segmento": "lajes",       "gestor": "VBI"},
+    "RBRP11": {"tipo": "tijolo", "segmento": "lajes",       "gestor": "Rio Bravo"},
+    "TRXF11": {"tipo": "tijolo", "segmento": "varejo",      "gestor": "TRX"},
+    "BTLG11": {"tipo": "tijolo", "segmento": "logistica",   "gestor": "BTG Pactual"},
+    "LVBI11": {"tipo": "tijolo", "segmento": "logistica",   "gestor": "VBI"},
+}
+
+# Liquidez de referência por FII (volume médio diário em R$)
+# Fallback quando yfinance não retorna dados
+LIQUIDEZ_REFERENCIA = {
+    "MXRF11": 15_000_000, "HGLG11": 8_000_000,  "XPML11": 6_000_000,
+    "VISC11": 5_000_000,  "HSML11": 4_000_000,  "BTLG11": 4_500_000,
+    "BRCR11": 3_000_000,  "KNSC11": 5_000_000,  "DEVA11": 4_000_000,
+    "RBRY11": 3_500_000,  "VGHF11": 4_000_000,  "KISU11": 2_000_000,
+    "RECT11": 2_500_000,  "BTHF11": 3_000_000,  "VINO11": 2_000_000,
+    "CNES11": 500_000,    "XPSL11": 3_000_000,  "SNAG11": 1_500_000,
+    "VGIA11": 2_000_000,  "SNFF11": 800_000,    "RZAG11": 1_000_000,
+    "IRDM11": 3_000_000,  "HGCR11": 4_000_000,  "VRTA11": 1_500_000,
+    "CVBI11": 1_000_000,  "BCRI11": 800_000,    "PVBI11": 2_000_000,
+    "RBRP11": 1_500_000,  "TRXF11": 2_000_000,  "LVBI11": 1_500_000,
+    "BRCO11": 3_000_000,
+}
+
+# DY anual de referência por FII (% a.a.) — fallback quando yfinance falha
+DY_REFERENCIA = {
+    "MXRF11": 12.5, "DEVA11": 11.8, "RBRY11": 12.0, "VGHF11": 11.5,
+    "KNSC11": 11.2, "KISU11": 11.0, "RECT11": 12.8, "BTHF11": 12.2,
+    "VINO11": 11.5, "CNES11": 13.0, "XPSL11": 11.8, "HGCR11": 11.5,
+    "VRTA11": 11.0, "IRDM11": 12.0, "CVBI11": 12.5, "BCRI11": 12.8,
+    "SNAG11": 10.5, "RZAG11": 10.8, "VGIA11": 10.2, "BRCR11": 9.5,
+    "SNFF11": 9.8,  "HGLG11": 10.5, "BRCO11": 10.8, "XPML11": 9.5,
+    "HSML11": 9.8,  "VISC11": 9.5,  "PVBI11": 9.2,  "RBRP11": 9.8,
+    "TRXF11": 10.5, "BTLG11": 10.2, "LVBI11": 10.0,
 }
 
 
@@ -43,48 +94,60 @@ def classificar_fii(ticker: str) -> Dict:
 
 def buscar_liquidez_diaria(ticker: str, period: str = "1y") -> Dict:
     """
-    Busca volume médio diário (liquidez) via yfinance
-
-    Args:
-        ticker: Ticker B3 (ex: DEVA11)
-        period: Período para cálculo (default: 1 ano)
-
-    Returns:
-        Dict com {volume_medio_diario, volume_medio_valor, liquidity_score}
+    Busca volume médio diário (liquidez) via yfinance, com fallback de referência
     """
     try:
         ticker_yf = f"{ticker}.SA"
         hist = yf.download(ticker_yf, period=period, progress=False)
 
-        if hist.empty:
-            return None
+        if not hist.empty:
+            volume_medio = float(hist["Volume"].mean())
+            valor_medio = float(hist["Close"].mean())
+            valor_volume_medio = volume_medio * valor_medio
 
-        # Calcular volume médio
-        volume_medio = hist["Volume"].mean()
-        valor_medio = hist["Close"].mean()
-        valor_volume_medio = volume_medio * valor_medio
+            if valor_volume_medio > 0:
+                if valor_volume_medio > 1_000_000:
+                    liquidity_score = 10
+                elif valor_volume_medio > 100_000:
+                    liquidity_score = 8
+                elif valor_volume_medio > 10_000:
+                    liquidity_score = 5
+                else:
+                    liquidity_score = 2
 
-        # Score de liquidez (0-10)
-        # > 1M = excelente, 100k-1M = bom, 10k-100k = razoável, < 10k = baixo
-        if valor_volume_medio > 1_000_000:
+                return {
+                    "volume_medio_diario": int(volume_medio),
+                    "valor_volume_medio": round(valor_volume_medio, 2),
+                    "liquidity_score": liquidity_score,
+                    "periodo": period,
+                    "fonte": "yfinance",
+                    "timestamp": datetime.now().isoformat()
+                }
+    except Exception:
+        pass
+
+    # Fallback: dados de referência
+    if ticker in LIQUIDEZ_REFERENCIA:
+        valor_volume_medio = LIQUIDEZ_REFERENCIA[ticker]
+        if valor_volume_medio > 5_000_000:
             liquidity_score = 10
-        elif valor_volume_medio > 100_000:
+        elif valor_volume_medio > 2_000_000:
             liquidity_score = 8
-        elif valor_volume_medio > 10_000:
-            liquidity_score = 5
+        elif valor_volume_medio > 500_000:
+            liquidity_score = 6
         else:
-            liquidity_score = 2
+            liquidity_score = 4
 
         return {
-            "volume_medio_diario": int(volume_medio),
-            "valor_volume_medio": round(valor_volume_medio, 2),
+            "volume_medio_diario": None,
+            "valor_volume_medio": valor_volume_medio,
             "liquidity_score": liquidity_score,
-            "periodo": period,
+            "periodo": "referencia",
+            "fonte": "referencia",
             "timestamp": datetime.now().isoformat()
         }
 
-    except Exception as e:
-        return None
+    return None
 
 
 def buscar_patrimonio_historico(ticker: str) -> Dict:
@@ -335,6 +398,16 @@ def analisar_fii_completo(ticker: str, dy_anual: Optional[float] = None, selic: 
         "timestamp": datetime.now().isoformat(),
         "dados": {}
     }
+
+    # Fallback de DY quando yfinance não retornou
+    if dy_anual is None and ticker in DY_REFERENCIA:
+        dy_anual = DY_REFERENCIA[ticker]
+        resultado["dados"]["dy_fonte"] = "referencia"
+    elif dy_anual is not None:
+        resultado["dados"]["dy_fonte"] = "yfinance"
+
+    if dy_anual is not None:
+        resultado["dados"]["dividend_yield_anual"] = dy_anual
 
     # 1. Classificar FII
     tipo_fii = classificar_fii(ticker)

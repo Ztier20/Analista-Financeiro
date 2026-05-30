@@ -711,9 +711,8 @@ def exibir_fii_detalhes(carteira, analises, macro_dados):
     progress = st.progress(0)
     for i, ativo in enumerate(fiis_filtrados):
         ticker = ativo["ticker"]
-        dy = ativo.get("dados_yf", {}).get("dividend_yield", 0)
-        if dy:
-            dy = dy * 100
+        dy_yf = ativo.get("dados_yf", {}).get("dividend_yield", 0)
+        dy = dy_yf * 100 if dy_yf else None
 
         if ticker not in st.session_state["fii_detalhes_cache"]:
             resultado = analisar_fii_completo(ticker, dy_anual=dy, selic=selic)
@@ -721,11 +720,14 @@ def exibir_fii_detalhes(carteira, analises, macro_dados):
         else:
             resultado = st.session_state["fii_detalhes_cache"][ticker]
 
+        # Usar DY do resultado (pode ser do fallback de referência)
+        dy_final = resultado["dados"].get("dividend_yield_anual") or dy or 0
+
         dados_completos.append({
             "ticker": ticker,
             "score": ativo.get("score", {}).get("score", "N/A"),
             "valor": ativo.get("valor", 0),
-            "dy": dy,
+            "dy": dy_final,
             "resultado": resultado
         })
         progress.progress((i + 1) / len(fiis_filtrados))
