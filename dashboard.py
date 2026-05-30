@@ -17,6 +17,7 @@ from tools.macro_data import macro
 from tools.asset_research import analisar_ativo
 from tools.scorer import calcular_score_por_classe
 from tools.correlacao import calcular_correlacao, interpretar_correlacao
+from tools.risco import calcular_risco_carteira
 
 
 # Config página
@@ -88,9 +89,11 @@ def processar_carteira(arquivo):
 
                 progress_bar.progress(contador / total_ativos)
 
-        # Invalidar cache de correlação para novo upload
+        # Invalidar caches para novo upload
         if "correlacao_resultado" in st.session_state:
             del st.session_state["correlacao_resultado"]
+        if "risco_resultado" in st.session_state:
+            del st.session_state["risco_resultado"]
 
         return carteira, analises, macro_dados
 
@@ -374,6 +377,137 @@ def exibir_correlacao(carteira):
     )
 
 
+def exibir_risco(carteira, macro_dados):
+    """Exibe análise de risco — Sharpe e Sortino por ativo"""
+    st.subheader("⚡ Análise de Risco Ajustado")
+
+    # Cache
+    CACHE_KEY = "risco_resultado"
+
+    if CACHE_KEY not in st.session_state:
+        with st.spinner("Calculando Sharpe e Sortino..."):
+            resultado = calcular_risco_carteira(carteira, macro_dados)
+            st.session_state[CACHE_KEY] = resultado
+    else:
+        resultado = st.session_state[CACHE_KEY]
+
+    if resultado is None:
+        st.warning(
+            "Não foi possível calcular risco. "
+            "São necessários pelo menos 1 ativo com histórico de mercado."
+        )
+        return
+
+    df_risco = resultado["tabela_risco"]
+    cdi = resultado["cdi_usado"]
+
+    # Info
+    col1, col2, col3 = st.columns(3)
+    col1.metric("CDI (Taxa Livre de Risco)", f"{cdi:.2f}%")
+    col2.metric("Ativos Analisados", resultado["n_ativos"])
+    col3.metric("Período", "1 ano")
+
+    st.divider()
+
+    # Tabela completa
+    st.subheader("📊 Tabela de Risco")
+    st.dataframe(df_risco, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # Gráficos
+    col1, col2 = st.columns(2)
+
+    # Sharpe
+    with col1:
+        st.subheader("Sharpe por Ativo")
+        df_sharpe = df_risco.dropna(subset=["Sharpe"]).sort_values("Sharpe")
+
+        if not df_sharpe.empty:
+            fig = px.bar(
+                df_sharpe,
+                x="Sharpe",
+                y="Ticker",
+                orientation="h",
+                color="Classificacao",
+                color_discrete_map={
+                    "Excelente": "#2ecc71",
+                    "Bom": "#3498db",
+                    "Aceitável": "#f39c12",
+                    "Ruim": "#e74c3c"
+                },
+                title="Índice de Sharpe"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Sem dados de Sharpe")
+
+    # Sortino
+    with col2:
+        st.subheader("Sortino por Ativo")
+        df_sortino = df_risco.dropna(subset=["Sortino"]).sort_values("Sortino")
+
+        if not df_sortino.empty:
+            fig = px.bar(
+                df_sortino,
+                x="Sortino",
+                y="Ticker",
+                orientation="h",
+                color_discrete_sequence=["#9b59b6"],
+                title="Índice de Sortino"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Sem dados de Sortino")
+
+    st.divider()
+
+    # Scatter: Retorno vs Volatilidade
+    st.subheader("Retorno × Volatilidade (Risco)")
+
+    df_scatter = df_risco.copy()
+    df_scatter["Tamanho"] = df_scatter["Sharpe"].abs() * 50
+    df_scatter["Tamanho"] = df_scatter["Tamanho"].fillna(10)
+
+    fig = px.scatter(
+        df_scatter,
+        x="Volatilidade",
+        y="Retorno_1y",
+        hover_name="Ticker",
+        size="Tamanho",
+        color="Classificacao",
+        color_discrete_map={
+            "Excelente": "#2ecc71",
+            "Bom": "#3498db",
+            "Aceitável": "#f39c12",
+            "Ruim": "#e74c3c",
+            "N/A": "#95a5a6"
+        },
+        title="Eficiência de Risco (maior para a esquerda, melhor para cima)",
+        labels={"Volatilidade": "Volatilidade (%)", "Retorno_1y": "Retorno 1 ano (%)"}
+    )
+    fig.update_layout(height=500)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    # Interpretação
+    st.info(
+        """
+        **Como ler:**
+        - **Sharpe**: Retorno excedente por unidade de risco (volatilidade total)
+          - > 1.0: Excelente | 0.5-1.0: Bom | 0-0.5: Aceitável | < 0: Ruim
+
+        - **Sortino**: Retorno excedente por unidade de risco negativo (downside)
+          - Mais relevante que Sharpe pois penaliza apenas quedas
+
+        - **Scatter**: Ativos no canto superior esquerdo são melhores (alto retorno + baixa volatilidade)
+
+        - **Taxa Livre de Risco**: CDI (14.40%) — retorno sem risco de mercado
+        """
+    )
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -388,8 +522,8 @@ def main():
         carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação"]
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco"]
         )
 
         with tab1:
@@ -418,6 +552,9 @@ def main():
 
         with tab6:
             exibir_correlacao(carteira)
+
+        with tab7:
+            exibir_risco(carteira, macro_dados)
 
         # Rodapé
         st.divider()

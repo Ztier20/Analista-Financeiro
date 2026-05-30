@@ -80,11 +80,18 @@ class CalculadoresFinanceiros:
         return (dividendos / lucro_liquido) * 100
 
     @staticmethod
-    def calcular_sharpe(retorno_anual: float, desvio_padrao: float, taxa_livre_risco: float = 13.75) -> Optional[float]:
+    def calcular_sharpe(retorno_anual: float, desvio_padrao: float, taxa_livre_risco: float = 0.0) -> Optional[float]:
         """Índice de Sharpe = (Retorno - Taxa Livre de Risco) / Desvio Padrão"""
         if desvio_padrao <= 0:
             return None
         return (retorno_anual - taxa_livre_risco) / desvio_padrao
+
+    @staticmethod
+    def calcular_sortino(retorno_anual: float, downside_deviation: float, taxa_livre_risco: float = 0.0) -> Optional[float]:
+        """Índice de Sortino = (Retorno - Taxa Livre de Risco) / Downside Deviation"""
+        if downside_deviation <= 0:
+            return None
+        return (retorno_anual - taxa_livre_risco) / downside_deviation
 
 
 class CalculadoresEspecializados:
