@@ -1,6 +1,6 @@
 # 📊 RELATÓRIO ANALISTA FINANCEIRO
 
-**Data:** 30/05/2026 00:11
+**Data:** 30/05/2026 08:28
 
 ## 📈 Contexto Macroeconômico
 
@@ -39,11 +39,11 @@
 | 3 | RZAG11 | FII | R$ 5,119.40 | 4.7% | 5.0 |
 | 4 | SNAG11 | FII | R$ 5,105.80 | 4.7% | 5.0 |
 | 5 | VGIA11 | FII | R$ 5,013.54 | 4.6% | 7.0 |
-| 6 | MXRF11 | FII | R$ 4,885.45 | 4.5% | 5.0 |
-| 7 | SNFF11 | FII | R$ 4,733.30 | 4.4% | 0.0 |
+| 6 | MXRF11 | FII | R$ 4,885.45 | 4.5% | 3.0 |
+| 7 | SNFF11 | FII | R$ 4,733.30 | 4.4% | 5.0 |
 | 8 | RBRY11 | FII | R$ 4,127.64 | 3.8% | 5.0 |
 | 9 | VGHF11 | FII | R$ 3,006.25 | 2.8% | 5.0 |
-| 10 | KNSC11 | FII | R$ 2,537.32 | 2.4% | 5.0 |
+| 10 | KNSC11 | FII | R$ 2,537.32 | 2.4% | 3.0 |
 
 ### 📈 Métricas de Concentração
 
@@ -69,9 +69,15 @@ Os 5 maiores ativos representam 70.8% da carteira.
 
 **🟠 📉 Qualidade Baixa de Ativos** (ALTA)
 
-12 ativos têm score < 4. Qualidade comprometida.
+13 ativos têm score < 4. Qualidade comprometida.
 
 *Recomendação: Revise e considere substituir ativos de baixa qualidade*
+
+**🟠 ⚠️ Muitos Ativos para Reduzir** (ALTA)
+
+15 REDUZAs + 0 VENDAs em 29 ativos.
+
+*Recomendação: Considere reavaliação estratégica da carteira ou atualização dos critérios*
 
 
 ## 💼 Carteira — 29 Ativos
@@ -83,7 +89,7 @@ Os 5 maiores ativos representam 70.8% da carteira.
 
 **Categoria:** N/A | **Recomendação:** `AUMENTE`
 
-P/L: 7.380953 | P/VP: 0.911443 | DY: 133.00% | Financial Services → Spread bancário forte com Selic a 14.4%
+P/L: 7.380953 | P/VP: 0.911443 | DY: 134.00% | Financial Services → Spread bancário forte com Selic a 14.4%
 
 ---
 
@@ -91,7 +97,7 @@ P/L: 7.380953 | P/VP: 0.911443 | DY: 133.00% | Financial Services → Spread ban
 
 **Categoria:** N/A | **Recomendação:** `AUMENTE`
 
-P/L: 6.7499995 | P/VP: 2.637959 | DY: 577.00% | Financial Services → Spread bancário forte com Selic a 14.4%
+P/L: 6.7499995 | P/VP: 2.637959 | DY: 612.00% | Financial Services → Spread bancário forte com Selic a 14.4%
 
 ---
 
@@ -107,7 +113,7 @@ P/L: 8.559211 | P/VP: 0.58903426 | DY: 573.00% | Utilities → Receita protegida
 
 **Categoria:** N/A | **Recomendação:** `MANTENHA`
 
-P/L: 24.72239 | P/VP: 1.8470528 | DY: 821.00% | Basic Materials → Commodity: mantém para diversificação global
+P/L: 24.796408 | P/VP: 1.8470528 | DY: 833.00% | Basic Materials → Commodity: mantém para diversificação global
 
 ---
 
@@ -125,75 +131,87 @@ Performance 1y: 14.57% | Índice: S&P 500 | AUM: N/D → ETF de renda variável 
 
 ### FII (16 ativo(s))
 
-#### ❓ BRCR11 — ! Score: 0
+#### 📉 BRCR11 — ! Score: 3
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Erro: unsupported format string passed to NoneType.__format__
-
----
-
-#### ❓ BTHF11 — ! Score: 0
-
-**Categoria:** N/A | **Recomendação:** `N/A`
-
-Erro: unsupported format string passed to NoneType.__format__
+DY 12m: 10.98% | Selic: 14.40% → Juros altos pressionam valuation; DY 11.0% não compensa
+**Ocupação:** 75% (25.0% vaga)
+  ⚠️ Ocupação fraca — risco de redução de fluxo
 
 ---
 
-#### ❓ CNES11 — ! Score: 0
+#### 📉 BTHF11 — ! Score: 3
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Erro: unsupported format string passed to NoneType.__format__
-
----
-
-#### ❓ DEVA11 — ◆ Score: 5.0
-
-**Categoria:** N/A | **Recomendação:** `N/A`
-
-Dados insuficientes
+DY 12m: 12.37% | Selic: 14.40% → Juros altos pressionam valuation; DY 12.4% não compensa
 
 ---
 
-#### ❓ KISU11 — ! Score: 0
+#### 📉 CNES11 — ! Score: 3
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Erro: unsupported format string passed to NoneType.__format__
-
----
-
-#### ❓ KNSC11 — ◆ Score: 5.0
-
-**Categoria:** N/A | **Recomendação:** `N/A`
-
-Dados insuficientes
+DY 12m: 6.68% | Selic: 14.40% → Juros altos pressionam valuation; DY 6.7% não compensa
 
 ---
 
-#### ❓ MXRF11 — ◆ Score: 5.0
+#### 📈 DEVA11 — ⭐ Score: 8
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `AUMENTE`
 
-Dados insuficientes
-
----
-
-#### ❓ RBRY11 — ◆ Score: 5.0
-
-**Categoria:** N/A | **Recomendação:** `N/A`
-
-Dados insuficientes
+DY 12m: 23.23% | Selic: 14.40% | Taxa real: 10.01% → DY significativamente acima de Selic (23.2% vs 14.4%)
+**Portfólio:** 12 CRIs (duration 3.5 anos)
+**Sustentabilidade:** Payout 98% (BOA)
+**Patrimônio:** +7.1% (12m)
 
 ---
 
-#### ❓ RECT11 — ! Score: 0
+#### 📉 KISU11 — ◆ Score: 5
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Erro: unsupported format string passed to NoneType.__format__
+DY 12m: 13.24% | Selic: 14.40% → Juros altos pressionam valuation; DY 13.2% não compensa
+
+---
+
+#### 📉 KNSC11 — ! Score: 3
+
+**Categoria:** N/A | **Recomendação:** `REDUZA`
+
+DY 12m: 12.27% | Selic: 14.40% | Taxa real: 10.01% → DY inferior a Selic em 2.1pp sem compensação
+
+---
+
+#### 📉 MXRF11 — ! Score: 3
+
+**Categoria:** N/A | **Recomendação:** `REDUZA`
+
+DY 12m: 11.97% | Selic: 14.40% | Taxa real: 10.01% → DY inferior a Selic em 2.4pp sem compensação
+**Portfólio:** 15 CRIs (duration 2.8 anos)
+**Sustentabilidade:** Payout 99% (BOA)
+**Patrimônio:** +5.6% (12m)
+
+---
+
+#### 📉 RBRY11 — ◆ Score: 5
+
+**Categoria:** N/A | **Recomendação:** `REDUZA`
+
+DY 12m: 14.87% | Selic: 14.40% | Taxa real: 10.01% → Renda fixa paga 14.4% com menos risco
+**Portfólio:** 10 CRIs (duration 4.2 anos)
+  ⚠️ Concentração alta (52% em top 5)
+**Sustentabilidade:** Payout 98% (BOA)
+**Patrimônio:** +4.9% (12m)
+
+---
+
+#### 📉 RECT11 — ! Score: 3
+
+**Categoria:** N/A | **Recomendação:** `REDUZA`
+
+DY 12m: 12.64% | Selic: 14.40% → Juros altos pressionam valuation; DY 12.6% não compensa
 
 ---
 
@@ -213,19 +231,21 @@ DY 12m: 14.79% | Selic: 14.40% | Taxa real: 10.01% → Renda fixa paga 14.4% com
 
 ---
 
-#### ❓ SNFF11 — ! Score: 0
+#### 📉 SNFF11 — ◆ Score: 5
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Erro: unsupported format string passed to NoneType.__format__
+DY 12m: 13.36% | Selic: 14.40% → Juros altos pressionam valuation; DY 13.4% não compensa
+**Ocupação:** 72% (28.0% vaga)
+  ⚠️ Ocupação fraca — risco de redução de fluxo
 
 ---
 
-#### ❓ VGHF11 — ◆ Score: 5.0
+#### 📉 VGHF11 — ◆ Score: 5
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Dados insuficientes
+DY 12m: 15.09% | Selic: 14.40% | Taxa real: 10.01% → Renda fixa paga 14.4% com menos risco
 
 ---
 
@@ -234,22 +254,23 @@ Dados insuficientes
 **Categoria:** N/A | **Recomendação:** `REDUZA`
 
 DY 12m: 16.89% | Selic: 14.40% → Juros altos pressionam valuation; DY 16.9% não compensa
+**Ocupação:** 95% (5.0% vaga)
 
 ---
 
-#### ❓ VINO11 — ! Score: 0
+#### 📉 VINO11 — ! Score: 3
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Erro: unsupported format string passed to NoneType.__format__
+DY 12m: 12.37% | Selic: 14.40% → Juros altos pressionam valuation; DY 12.4% não compensa
 
 ---
 
-#### ❓ XPSF11 — ◆ Score: 5.0
+#### 📉 XPSF11 — ! Score: 3
 
-**Categoria:** N/A | **Recomendação:** `N/A`
+**Categoria:** N/A | **Recomendação:** `REDUZA`
 
-Dados insuficientes
+DY 12m: 12.07% | Selic: 14.40% | Taxa real: 10.01% → DY inferior a Selic em 2.3pp sem compensação
 
 ---
 
@@ -329,9 +350,9 @@ Tipo: Tesouro IPCA+ | Taxa real: 10.01% | IPCA 12m: 4.39% → Taxa real 10.01% e
 
 ## 📝 Sumário de Recomendações
 
-- **AUMENTE**: 4 ativo(s)
+- **AUMENTE**: 5 ativo(s)
 - **MANTENHA**: 9 ativo(s)
-- **REDUZA**: 3 ativo(s)
+- **REDUZA**: 15 ativo(s)
 
 
 ---

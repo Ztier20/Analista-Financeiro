@@ -22,10 +22,11 @@ class Interpretador:
         self,
         ticker: str,
         dados_brapi: Optional[Dict] = None,
-        dados_yf: Optional[Dict] = None
+        dados_yf: Optional[Dict] = None,
+        fii_proativo: Optional[Dict] = None
     ) -> Tuple[str, str]:
         """
-        Interpreta FII de papel (CRIs/LCIs)
+        Interpreta FII de papel (CRIs/LCIs) com análise proativa detalhada
         Retorna: (recomendação, análise_textual)
         """
         if not dados_yf:
@@ -67,15 +68,41 @@ class Interpretador:
             recomendacao = "REDUZA"
             motivo = f"DY inferior a Selic em {self.selic - dy_12m:.1f}pp sem compensação"
 
-        return recomendacao, f"{analise} → {motivo}"
+        texto_final = f"{analise} → {motivo}"
+
+        # 🆕 Adicionar dados proativos detalhados
+        if fii_proativo:
+            detalhes = []
+
+            if fii_proativo.get("portfolio_cri"):
+                port = fii_proativo["portfolio_cri"]
+                detalhes.append(f"**Portfólio:** {port.get('num_cris', 'N/A')} CRIs (duration {port.get('duration_media_anos', 'N/A')} anos)")
+                if port.get("risco_concentracao") == "ALTA":
+                    detalhes.append(f"  ⚠️ Concentração alta ({port.get('concentracao_top5', 0):.0%} em top 5)")
+
+            if fii_proativo.get("fluxo_caixa"):
+                fcf = fii_proativo["fluxo_caixa"]
+                detalhes.append(f"**Sustentabilidade:** Payout {fcf.get('payout_ratio', 'N/A'):.0f}% ({fcf.get('sustentabilidade', 'N/A')})")
+
+            if fii_proativo.get("patrimonio"):
+                pat = fii_proativo["patrimonio"]
+                cresc = pat.get("crescimento_percentual", 0)
+                if cresc != 0:
+                    detalhes.append(f"**Patrimônio:** {'+' if cresc > 0 else ''}{cresc:.1f}% (12m)")
+
+            if detalhes:
+                texto_final += "\n" + "\n".join(detalhes)
+
+        return recomendacao, texto_final
 
     def interpretar_fii_tijolo(
         self,
         ticker: str,
         dados_brapi: Optional[Dict] = None,
-        dados_yf: Optional[Dict] = None
+        dados_yf: Optional[Dict] = None,
+        fii_proativo: Optional[Dict] = None
     ) -> Tuple[str, str]:
-        """Interpreta FII de tijolo (shoppings, galpões, hotéis)"""
+        """Interpreta FII de tijolo (shoppings, galpões, hotéis) com análise proativa"""
         if not dados_yf:
             return "N/A", "Dados insuficientes"
 
@@ -101,7 +128,32 @@ class Interpretador:
             recomendacao = "MANTENHA"
             motivo = f"Valuation e DY em equilíbrio"
 
-        return recomendacao, f"{analise} → {motivo}"
+        texto_final = f"{analise} → {motivo}"
+
+        # 🆕 Adicionar dados proativos detalhados
+        if fii_proativo:
+            detalhes = []
+
+            if fii_proativo.get("vacancia"):
+                vac = fii_proativo["vacancia"]
+                ocupacao = vac.get("ocupacao_estimada", 0) * 100
+                detalhes.append(f"**Ocupação:** {ocupacao:.0f}% ({vac.get('vacancia_estimada', 0):.1f}% vaga)")
+                if ocupacao < 80:
+                    detalhes.append(f"  ⚠️ Ocupação fraca — risco de redução de fluxo")
+
+            if fii_proativo.get("fluxo_caixa"):
+                fcf = fii_proativo["fluxo_caixa"]
+                detalhes.append(f"**Sustentabilidade:** Payout {fcf.get('payout_ratio', 'N/A'):.0f}% ({fcf.get('sustentabilidade', 'N/A')})")
+
+            if fii_proativo.get("liquidez"):
+                liq = fii_proativo["liquidez"]
+                score = liq.get("liquidity_score", 5)
+                detalhes.append(f"**Liquidez:** Score {score}/10")
+
+            if detalhes:
+                texto_final += "\n" + "\n".join(detalhes)
+
+        return recomendacao, texto_final
 
     def interpretar_acao_br(
         self,

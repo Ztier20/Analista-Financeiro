@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 import json
 from typing import Optional, Dict, Any
 
+from tools.fii_analytics import analisar_fii_completo
+from tools.macro_data import macro
+
 
 class PesquisadorAtivo:
     """Pesquisa e análise de ativos do Brasil e exterior"""
@@ -44,8 +47,8 @@ class PesquisadorAtivo:
 
     def _buscar_fii(self, ticker: str) -> Dict[str, Any]:
         """
-        FII (Fundo de Investimento Imobiliário)
-        Busca: yield, P/VP, vacância, liquidez, portfólio
+        FII (Fundo de Investimento Imobiliário) — Análise Proativa Detalhada
+        Busca: yield, P/VP, vacância, liquidez, portfólio CRI, FCF, patrimônio
         """
         dados = {}
 
@@ -54,11 +57,13 @@ class PesquisadorAtivo:
             hist = ativo.history(period="1y")
 
             dados["cotacao_atual"] = ativo.info.get("currentPrice", None)
-            dados["dividend_yield_12m"] = self._calcular_dividend_yield(hist)
+            dy = self._calcular_dividend_yield(hist)
+            dados["dividend_yield_12m"] = dy
             dados["liquidez_media"] = hist["Volume"].mean() if not hist.empty else None
 
         except Exception as e:
             dados["erro_yfinance"] = str(e)
+            dy = None
 
         # Buscar dados do Status Invest (API pública)
         try:
@@ -66,6 +71,28 @@ class PesquisadorAtivo:
             dados.update(dados_status)
         except:
             pass
+
+        # 🆕 Análise Proativa Detalhada do FII
+        try:
+            macro_dados = macro.obter_todas()
+            selic = macro_dados.get("selic", 14.4)
+            analise_fii = analisar_fii_completo(ticker, dy_anual=dy, selic=selic)
+
+            # Adicionar dados detalhados
+            if analise_fii.get("dados"):
+                dados["fii_proativo"] = {
+                    "tipo": analise_fii["dados"].get("tipo"),
+                    "segmento": analise_fii["dados"].get("segmento"),
+                    "gestor": analise_fii["dados"].get("gestor"),
+                    "liquidez": analise_fii["dados"].get("liquidez"),
+                    "patrimonio": analise_fii["dados"].get("patrimonio"),
+                    "vacancia": analise_fii["dados"].get("vacancia"),
+                    "portfolio_cri": analise_fii["dados"].get("portfolio_cri"),
+                    "fluxo_caixa": analise_fii["dados"].get("fluxo_caixa"),
+                    "analise": analise_fii.get("analise")
+                }
+        except Exception as e:
+            dados["erro_fii_proativo"] = str(e)
 
         return dados
 

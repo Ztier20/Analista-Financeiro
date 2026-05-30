@@ -79,19 +79,24 @@ def gerar_relatorio(arquivo_extrato: str):
 
                 # Gerar interpretação
                 if classe == "FII":
+                    # Extrair dados proativos de FII
+                    fii_proativo = dados_yf.get("dados", {}).get("fii_proativo") if dados_yf else None
+
                     # Distinguir papel vs tijolo (simplificado: papel se ticker em lista conhecida)
                     fiis_papel = ["DEVA11", "MXRF11", "RBRY11", "VGHF11", "KNSC11", "XPSF11", "SNAG11", "RZAG11"]
                     if ticker in fiis_papel:
                         rec, anl = interpretador.interpretar_fii_papel(
                             ticker,
                             dados_brapi=dados_brapi,
-                            dados_yf=dados_yf.get("dados") if dados_yf else None
+                            dados_yf=dados_yf.get("dados") if dados_yf else None,
+                            fii_proativo=fii_proativo
                         )
                     else:
                         rec, anl = interpretador.interpretar_fii_tijolo(
                             ticker,
                             dados_brapi=dados_brapi,
-                            dados_yf=dados_yf.get("dados") if dados_yf else None
+                            dados_yf=dados_yf.get("dados") if dados_yf else None,
+                            fii_proativo=fii_proativo
                         )
 
                 elif classe == "ACAO_BR":
