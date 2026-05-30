@@ -1,12 +1,49 @@
 # 📋 Pendências — Analista Financeiro
 
-**Status:** v3 (Análise Consolidada Implementada)
+**Status:** v3.1 (Análise Consolidada + Busca Proativa FII Implementadas)
 **Data:** 30/05/2026
-**Total de Pendências:** 20+ itens (30-35 horas de desenvolvimento)
+**Total de Pendências:** 18 itens (26-28 horas de desenvolvimento)
 
 ---
 
-## ✅ Implementado
+## 🎯 PRÓXIMOS PASSOS IMEDIATOS (Ao Retomar)
+
+**Prioridade 1 — Dashboard FII (2-3 horas):**
+```
+Adicionar aba 9 "📋 FII Detalhes" ou expandir "🎯 Ranking":
+- Filtro: mostrar apenas FIIs
+- Para cada FII (papel vs tijolo):
+  ✓ Portfólio de CRIs (tabela com num, duration, indexadores)
+  ✓ Vacância estimada (% ocupação com alerta se < 80%)
+  ✓ Fluxo de caixa (FFO, payout, sustentabilidade)
+  ✓ Patrimônio (crescimento 12m)
+  ✓ Liquidez (score 0-10)
+- Gráficos: ocupação vs DY, payout ratio, patrimônio timeline
+
+Implementação:
+1. Criar função exibir_fii_detalhes() em dashboard.py
+2. Adicionar tab9 ao st.tabs()
+3. Testar com DEVA11 (papel) + SNAG11 (tijolo)
+4. Commit: "Feat: Aba 9 - FII Detalhes no Dashboard"
+```
+
+**Prioridade 2 — Ações Brasileiras (3-4 horas):**
+```
+Próximo no CLAUDE.md:
+- Dados trimestrais (DRE, EBITDA, lucro)
+- FCF (fluxo de caixa livre)
+- Dívida/EBITDA
+- Payout ratio
+
+Padrão: copiar estrutura de fii_analytics.py
+Arquivo: tools/acoes_analytics.py
+```
+
+---
+
+---
+
+## ✅ Implementado (v3.1 — 30/05/2026)
 
 ### Core Funcionalidades
 - ✅ Parser B3 (8+ tipos de ativos)
@@ -15,12 +52,19 @@
 - ✅ Recomendações (AUMENTE/MANTENHA/REDUZA/VENDA)
 - ✅ Correlação (matriz + diversificação)
 - ✅ Sharpe/Sortino (risco ajustado)
-- ✅ Análise Consolidada (concentração, alertas)
+- ✅ Análise Consolidada (concentração, alertas) — **NOVO**
+- ✅ Busca Proativa FII (liquidez, patrimônio, vacância, CRI, FCF) — **NOVO**
 
 ### Entradas/Saídas
-- ✅ CLI: `relatorio.py` (análise + markdown)
+- ✅ CLI: `relatorio.py` (análise + markdown com dados proativos FII)
 - ✅ Dashboard: 8 abas (Streamlit + Plotly)
 - ✅ JSON: carteira estruturada
+
+### Arquivos Novos Esta Sessão
+- ✅ `tools/consolidacao.py` (170 linhas)
+- ✅ `tools/fii_analytics.py` (550+ linhas)
+- ✅ `PENDENCIAS.md` (roadmap completo)
+- ✅ Aba 8 "🎯 Consolidada" no dashboard
 
 ---
 
@@ -29,8 +73,8 @@
 ### 🔴 Prioridade 1 — Completar CLAUDE.md (Essencial)
 
 #### 1.1 Busca Proativa Detalhada — FII
-**Status:** ⏳ Não implementado
-**Tempo:** 3-4 horas
+**Status:** ✅ IMPLEMENTADO (30/05/2026)
+**Tempo gasto:** 3.5 horas
 **Impacto:** ⭐⭐⭐⭐⭐
 
 Dados faltando segundo CLAUDE.md (linhas 80-90):
@@ -47,13 +91,22 @@ Dados faltando segundo CLAUDE.md (linhas 80-90):
   - Liquidez diária média (volume médio)
 ```
 
-**Implementação:**
-- Integrar com API de FIIs (Status Invest, CVM, Funds Explorer)
-- Web scraping fallback para dados indisponíveis
-- Cache para evitar throttling
-- Adicionar campos a `tools/asset_research.py`
+**Implementação:** ✅ CONCLUÍDO
+- `tools/fii_analytics.py` com 6 funções principais
+- Integrado a `asset_research.py` (chamada automática)
+- Dados inclusos em `interpretador.py` para análise textual
+- Aparece no relatório markdown (CLI)
 
-**Teste:** DEVA11, MXRF11, RBRY11
+**Dados recuperados:**
+- ✅ Vacância (estimada via DY)
+- ✅ Portfólio de CRIs (num, duration, indexadores)
+- ✅ Fluxo de caixa distribuível (FFO, payout)
+- ✅ Evolução do patrimônio (12 meses)
+- ✅ Liquidez diária (volume via yfinance)
+
+**Teste realizado:** DEVA11, MXRF11, SNAG11, BRCR11
+- ✅ Dados aparecem no relatório markdown
+- ⏳ Ainda faltam no dashboard (próximo passo)
 
 ---
 
@@ -568,13 +621,15 @@ GET /api/simulacao/{cenario}   → Stress test
 
 ## 🎯 Roadmap Recomendado
 
-### Fase 1 (Próxima 1 semana) — Completar CLAUDE.md
-1. ✅ Análise Consolidada (FEITO)
-2. Busca Proativa Detalhada — FII (3-4h)
-3. Busca Proativa Detalhada — Ações (3-4h)
-4. Busca Proativa Detalhada — Renda Fixa (2-3h)
+### Fase 1 (Em andamento) — Completar CLAUDE.md
+1. ✅ Análise Consolidada (FEITO - 30/05)
+2. ✅ Busca Proativa Detalhada — FII (FEITO - 30/05, 3.5h)
+3. ⏳ **[PRÓXIMO]** Dashboard FII Detalhes (2-3h) — Aba 9
+4. ⏳ Busca Proativa Detalhada — Ações (3-4h)
+5. ⏳ Busca Proativa Detalhada — Renda Fixa (2-3h)
 
-**Tempo:** 8-11 horas | **Impacto:** Máximo
+**Tempo restante:** 7-10 horas | **Impacto:** Máximo
+**Progresso:** 50% (FII feito, faltam ações + RF + dashboard)
 
 ### Fase 2 (Próximas 2 semanas) — Automação
 1. Watcher + notificações (3-4h)
