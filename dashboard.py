@@ -20,6 +20,7 @@ from tools.correlacao import calcular_correlacao, interpretar_correlacao
 from tools.risco import calcular_risco_carteira
 from tools.consolidacao import analisar_concentracao, gerar_alertas_estrategicos
 from tools.fii_analytics import analisar_fii_completo
+from tools.acoes_analytics import analisar_acao_completa
 
 
 # Config página
@@ -898,6 +899,232 @@ def exibir_fii_detalhes(carteira, analises, macro_dados):
             st.markdown(d["resultado"]["analise"])
 
 
+def exibir_acoes_detalhes(analises, macro_dados):
+    """Aba 10 — Análise fundamentalista detalhada das ações brasileiras"""
+    st.subheader("📈 Ações Detalhes — Análise Fundamentalista")
+
+    # Extrair ações
+    acoes = []
+    for classe, ativos_lista in analises.items():
+        if classe == "ACAO_BR":
+            for a in ativos_lista:
+                acoes.append(a)
+
+    if not acoes:
+        st.info("Nenhuma ação brasileira encontrada na carteira.")
+        return
+
+    # Filtros
+    col_f1, col_f2 = st.columns([2, 1])
+    with col_f1:
+        tickers_acao = [a["ticker"] for a in acoes]
+        selecionados = st.multiselect(
+            "Filtrar ações",
+            options=tickers_acao,
+            default=tickers_acao,
+            key="acao_detalhe_filtro"
+        )
+
+    acoes_filtradas = [a for a in acoes if a["ticker"] in selecionados]
+    if not acoes_filtradas:
+        st.warning("Nenhuma ação selecionada.")
+        return
+
+    # Buscar/cache dados completos
+    if "acoes_detalhes_cache" not in st.session_state:
+        st.session_state["acoes_detalhes_cache"] = {}
+
+    dados_completos = []
+    progress = st.progress(0)
+    for i, ativo in enumerate(acoes_filtradas):
+        ticker = ativo["ticker"]
+        dados_yf = ativo.get("dados_yf", {})
+
+        if ticker not in st.session_state["acoes_detalhes_cache"]:
+            resultado = analisar_acao_completa(ticker, dados_yf=dados_yf)
+            st.session_state["acoes_detalhes_cache"][ticker] = resultado
+        else:
+            resultado = st.session_state["acoes_detalhes_cache"][ticker]
+
+        dados_completos.append({
+            "ticker": ticker,
+            "score": ativo.get("score", {}).get("score", "N/A"),
+            "valor": ativo.get("valor", 0),
+            "dados_yf": dados_yf,
+            "resultado": resultado,
+        })
+        progress.progress((i + 1) / len(acoes_filtradas))
+
+    st.divider()
+
+    # ── Seção 1: Tabela resumo ─────────────────────────────────────────────
+    st.subheader("📊 Resumo Comparativo")
+
+    rows = []
+    for d in dados_completos:
+        rd = d["resultado"]["dados"]
+        dre = rd.get("dre", {})
+        alav = rd.get("alavancagem", {})
+        fcf = rd.get("fcf", {})
+        pay = rd.get("payout", {})
+        cresc = rd.get("crescimento", {})
+        yf = d["dados_yf"]
+
+        margem_ebitda = (
+            (dre["ebitda_12m"] / dre["receita_12m"] * 100)
+            if dre.get("ebitda_12m") and dre.get("receita_12m") else None
+        )
+        margem_liq = (
+            (dre["lucro_liquido_12m"] / dre["receita_12m"] * 100)
+            if dre.get("lucro_liquido_12m") and dre.get("receita_12m") else None
+        )
+
+        rows.append({
+            "Ticker": d["ticker"],
+            "Nome": rd.get("nome", "—"),
+            "Setor": rd.get("setor", yf.get("setor", "—")),
+            "Score": f"{d['score']:.1f}" if isinstance(d["score"], (int, float)) else "N/A",
+            "P/L": f"{yf.get('p_l', 0):.1f}x" if yf.get("p_l") else "N/A",
+            "P/VP": f"{yf.get('p_vp', 0):.1f}x" if yf.get("p_vp") else "N/A",
+            "DY": f"{(yf.get('dividend_yield') or 0)*100:.1f}%" if yf.get("dividend_yield") else "N/A",
+            "Receita 12m": f"R$ {dre['receita_12m']/1e9:.1f}B" if dre.get("receita_12m") else "N/A",
+            "Mg. EBITDA": f"{margem_ebitda:.0f}%" if margem_ebitda else "N/A",
+            "Mg. Líquida": f"{margem_liq:.0f}%" if margem_liq else "N/A",
+            "DL/EBITDA": f"{alav['indice_dl_ebitda']:.1f}x" if alav.get("indice_dl_ebitda") is not None else "N/A",
+            "Alavancagem": alav.get("classificacao_alavancagem", "N/A"),
+            "FCF 12m": f"R$ {fcf['fcf_12m']/1e9:.1f}B" if fcf.get("fcf_12m") else "N/A",
+            "Payout": f"{pay['payout_ratio']:.0f}%" if pay.get("payout_ratio") else "N/A",
+            "Cresc. Lucro": f"{cresc['crescimento_ultimo_trimestre']:+.1f}%" if cresc.get("crescimento_ultimo_trimestre") is not None else "N/A",
+            "Tendência": cresc.get("tendencia", "N/A"),
+        })
+
+    df_resumo = pd.DataFrame(rows)
+    st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ── Seção 2: Gráficos ─────────────────────────────────────────────────
+    col1, col2 = st.columns(2)
+
+    # DL/EBITDA
+    with col1:
+        st.subheader("Alavancagem (DL/EBITDA)")
+        df_alav = pd.DataFrame([
+            {
+                "Ticker": d["ticker"],
+                "DL/EBITDA": d["resultado"]["dados"].get("alavancagem", {}).get("indice_dl_ebitda", 0) or 0,
+                "Classificação": d["resultado"]["dados"].get("alavancagem", {}).get("classificacao_alavancagem", "N/A"),
+            }
+            for d in dados_completos if d["resultado"]["dados"].get("alavancagem")
+        ])
+        if not df_alav.empty:
+            fig = px.bar(
+                df_alav.sort_values("DL/EBITDA"),
+                x="DL/EBITDA", y="Ticker", orientation="h",
+                color="Classificação",
+                color_discrete_map={
+                    "CAIXA LÍQUIDO": "#27ae60",
+                    "BAIXA": "#2ecc71",
+                    "SAUDÁVEL": "#3498db",
+                    "MODERADA": "#f39c12",
+                    "ALTA": "#e74c3c",
+                },
+                title="Dívida Líquida / EBITDA"
+            )
+            fig.add_vline(x=2, line_dash="dash", line_color="orange",
+                          annotation_text="2x (referência)")
+            st.plotly_chart(fig, use_container_width=True)
+
+    # Payout ratio
+    with col2:
+        st.subheader("Payout Ratio")
+        df_pay = pd.DataFrame([
+            {
+                "Ticker": d["ticker"],
+                "Payout (%)": d["resultado"]["dados"].get("payout", {}).get("payout_ratio", 0) or 0,
+                "Classificação": d["resultado"]["dados"].get("payout", {}).get("classificacao", "N/A"),
+            }
+            for d in dados_completos if d["resultado"]["dados"].get("payout")
+        ])
+        if not df_pay.empty:
+            fig = px.bar(
+                df_pay.sort_values("Payout (%)"),
+                x="Payout (%)", y="Ticker", orientation="h",
+                color="Classificação",
+                color_discrete_map={
+                    "CONSERVADOR": "#3498db",
+                    "EQUILIBRADO": "#2ecc71",
+                    "GENEROSO": "#f39c12",
+                    "INSUSTENTÁVEL": "#e74c3c",
+                },
+                title="Payout Ratio (% do lucro distribuído)"
+            )
+            fig.add_vline(x=100, line_dash="dash", line_color="red",
+                          annotation_text="100%")
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    # ── Seção 3: DRE Trimestral ───────────────────────────────────────────
+    st.subheader("📋 DRE Trimestral")
+
+    acao_selecionada = st.selectbox(
+        "Selecione a ação",
+        options=[d["ticker"] for d in dados_completos],
+        key="acao_dre_select"
+    )
+
+    acao_data = next((d for d in dados_completos if d["ticker"] == acao_selecionada), None)
+    if acao_data:
+        dre = acao_data["resultado"]["dados"].get("dre", {})
+        trimestrais = dre.get("trimestrais", [])
+
+        if trimestrais:
+            df_tri = pd.DataFrame(trimestrais)
+            df_tri_display = df_tri.copy()
+            for col in ["receita", "ebitda", "lucro"]:
+                if col in df_tri_display.columns:
+                    df_tri_display[col] = df_tri_display[col].apply(
+                        lambda x: f"R$ {x/1e9:.2f}B" if pd.notna(x) and x else "N/A"
+                    )
+            df_tri_display.columns = [c.title() for c in df_tri_display.columns]
+            st.dataframe(df_tri_display, use_container_width=True, hide_index=True)
+
+            # Gráfico de barras agrupadas
+            df_plot = df_tri.copy()
+            df_plot["receita_bi"] = df_plot["receita"].apply(lambda x: x / 1e9 if x else 0)
+            df_plot["ebitda_bi"] = df_plot["ebitda"].apply(lambda x: x / 1e9 if x else None)
+            df_plot["lucro_bi"] = df_plot["lucro"].apply(lambda x: x / 1e9 if x else 0)
+
+            fig = go.Figure()
+            fig.add_bar(x=df_plot["periodo"], y=df_plot["receita_bi"],
+                        name="Receita", marker_color="#3498db")
+            if df_plot["ebitda_bi"].notna().any():
+                fig.add_bar(x=df_plot["periodo"], y=df_plot["ebitda_bi"],
+                            name="EBITDA", marker_color="#2ecc71")
+            fig.add_bar(x=df_plot["periodo"], y=df_plot["lucro_bi"],
+                        name="Lucro Líquido", marker_color="#e67e22")
+            fig.update_layout(
+                title=f"DRE Trimestral — {acao_selecionada} (R$ Bilhões)",
+                barmode="group", height=400
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info(f"Dados trimestrais não disponíveis para {acao_selecionada}.")
+
+    st.divider()
+
+    # ── Seção 4: Análise textual por ação ─────────────────────────────────
+    st.subheader("💬 Análise por Ação")
+    for d in dados_completos:
+        score = d["score"]
+        score_str = f"{score:.1f}" if isinstance(score, (int, float)) else "N/A"
+        nome = d["resultado"]["dados"].get("nome", d["ticker"])
+
+        with st.expander(f"📈 {d['ticker']} — {nome} | Score {score_str}"):
+            st.markdown(d["resultado"]["analise"])
+
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -912,8 +1139,8 @@ def main():
         carteira, analises, macro_dados = processar_carteira(arquivo)
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(
-            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes"]
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
+            ["📈 Macro", "🎯 Scores", "📊 Ranking", "🔍 Filtros", "📉 Gráficos", "🔗 Correlação", "⚡ Risco", "🎯 Consolidada", "📋 FII Detalhes", "📈 Ações Detalhes"]
         )
 
         with tab1:
@@ -952,6 +1179,9 @@ def main():
         with tab9:
             exibir_fii_detalhes(carteira, analises, macro_dados)
 
+        with tab10:
+            exibir_acoes_detalhes(analises, macro_dados)
+
         # Rodapé
         st.divider()
         st.caption(
@@ -980,6 +1210,7 @@ def main():
         - **Filtros** — Filtrar por faixa de score
         - **Gráficos** — Distribuição de scores
         - **FII Detalhes** — CRIs, vacância, FFO, patrimônio por FII
+        - **Ações Detalhes** — DRE trimestral, FCF, alavancagem, payout por ação
 
         ---
 

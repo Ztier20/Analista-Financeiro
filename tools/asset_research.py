@@ -6,6 +6,7 @@ import json
 from typing import Optional, Dict, Any
 
 from tools.fii_analytics import analisar_fii_completo
+from tools.acoes_analytics import analisar_acao_completa
 from tools.macro_data import macro
 
 
@@ -98,8 +99,8 @@ class PesquisadorAtivo:
 
     def _buscar_acao_br(self, ticker: str) -> Dict[str, Any]:
         """
-        Ação brasileira
-        Busca: valuation (P/L, P/VP, EV/EBITDA), dividendos, fluxo de caixa
+        Ação brasileira — Análise Proativa Detalhada
+        Busca: valuation, DRE trimestral, FCF, Dívida/EBITDA, payout, crescimento
         """
         dados = {}
 
@@ -121,6 +122,24 @@ class PesquisadorAtivo:
 
         except Exception as e:
             dados["erro_yfinance"] = str(e)
+
+        # Análise Proativa Detalhada
+        try:
+            analise_acao = analisar_acao_completa(ticker, dados_yf=dados)
+            if analise_acao.get("dados"):
+                dados["acao_proativo"] = {
+                    "nome": analise_acao["dados"].get("nome"),
+                    "setor": analise_acao["dados"].get("setor"),
+                    "subsetor": analise_acao["dados"].get("subsetor"),
+                    "dre": analise_acao["dados"].get("dre"),
+                    "fcf": analise_acao["dados"].get("fcf"),
+                    "alavancagem": analise_acao["dados"].get("alavancagem"),
+                    "payout": analise_acao["dados"].get("payout"),
+                    "crescimento": analise_acao["dados"].get("crescimento"),
+                    "analise": analise_acao.get("analise"),
+                }
+        except Exception as e:
+            dados["erro_acao_proativo"] = str(e)
 
         return dados
 
